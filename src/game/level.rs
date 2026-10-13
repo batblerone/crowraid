@@ -5,19 +5,17 @@ use bevy::{color::palettes::css::*, prelude::*};
 use noise::{NoiseFn, Perlin};
 
 use crate::{
+    PausableSystems,
     asset_tracking::LoadResource,
     audio::music,
     game::player::{PlayerAssets, player},
     screens::*,
 };
 
-pub const SEGMENT_HEIGHT: f32 = 80.0;
+pub const SEGMENT_HEIGHT: f32 = 300.0;
 pub const SCROLL_SPEED: f32 = 300.0;
-// pub const CHANNEL_BASE_WIDTH: f32 = 300.0;
-// pub const WALL_THICKNESS: f32 = 40.0;
-
 pub const SCREEN_HALF_WIDTH: f32 = 600.0;
-pub const CHANNEL_WIDTH: f32 = 320.0;
+pub const CHANNEL_WIDTH: f32 = 800.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<ChannelGeneratorConfig>()
@@ -26,7 +24,8 @@ pub(super) fn plugin(app: &mut App) {
             Update,
             (generate_channel_segments, scroll_and_cleanup_channel)
                 .chain()
-                .run_if(in_state(Screen::Gameplay)),
+                .run_if(in_state(Screen::Gameplay))
+                .in_set(PausableSystems),
         );
 }
 
@@ -60,6 +59,9 @@ pub struct ChannelSegment {
     pub bottom_y: f32,
     pub top_y: f32,
 }
+
+#[derive(Component)]
+pub struct Wall;
 
 impl FromWorld for LevelAssets {
     fn from_world(world: &mut World) -> Self {
@@ -119,7 +121,7 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
     let channel_right = center_offset + (CHANNEL_WIDTH * 0.5);
 
     // Calc the widths and centers for a solid landmass
-    let left_width = channel_left - (SCREEN_HALF_WIDTH);
+    let left_width = channel_left + SCREEN_HALF_WIDTH;
     let left_center = -SCREEN_HALF_WIDTH + (left_width * 0.5);
 
     let right_width = SCREEN_HALF_WIDTH - channel_right;
@@ -141,6 +143,7 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
     segment_commands.with_children(|parent| {
         // left wall
         parent.spawn((
+            Wall,
             Sprite {
                 color: Color::from(FOREST_GREEN),
                 custom_size: Some(Vec2::new(left_width, SEGMENT_HEIGHT)),
@@ -149,10 +152,14 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
             RigidBody::Static,
             Collider::rectangle(left_width, SEGMENT_HEIGHT),
             Transform::from_xyz(left_center, 0.0, 0.0),
+            CollisionEventsEnabled,
+            // State management
+            DespawnOnExit(Screen::Gameplay),
         ));
 
         // Right Wall
         parent.spawn((
+            Wall,
             Sprite {
                 color: Color::from(FOREST_GREEN),
                 custom_size: Some(Vec2::new(right_width, SEGMENT_HEIGHT)),
@@ -161,12 +168,16 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
             RigidBody::Static,
             Collider::rectangle(right_width, SEGMENT_HEIGHT),
             Transform::from_xyz(right_center, 0.0, 0.0),
+            CollisionEventsEnabled,
+            // State management
+            DespawnOnExit(Screen::Gameplay),
         ));
 
         // For a split
         if is_split {
             let island_width = 50.0;
             parent.spawn((
+                Wall,
                 Sprite {
                     color: Color::from(FOREST_GREEN),
                     custom_size: Some(Vec2::new(island_width, SEGMENT_HEIGHT)),
@@ -175,6 +186,9 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
                 RigidBody::Static,
                 Collider::rectangle(island_width, SEGMENT_HEIGHT),
                 Transform::from_xyz(center_offset, 0.0, 0.0),
+                CollisionEventsEnabled,
+                // State management
+                DespawnOnExit(Screen::Gameplay),
             ));
         }
     });
