@@ -20,6 +20,8 @@ use crate::{
         animation::PlayerAnimation,
         movement::{MovementController, ScreenWrap},
     },
+    screens::Screen,
+    screens::gameplay::Health,
 };
 
 pub(super) fn plugin(app: &mut App) {
@@ -33,6 +35,10 @@ pub(super) fn plugin(app: &mut App) {
             .in_set(PausableSystems),
     );
 }
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Reflect)]
+#[reflect(Component)]
+pub struct Player;
 
 /// The player character.
 pub fn player(
@@ -56,6 +62,10 @@ pub fn player(
     (
         Name::new("Player"),
         Player,
+        Health {
+            current: 100.0,
+            max: 100.0,
+        },
         Sprite::from_atlas_image(
             player_assets.ducky.clone(),
             TextureAtlas {
@@ -74,12 +84,12 @@ pub fn player(
         RigidBody::Dynamic,
         Collider::circle((ATLAS_HEIGHT * ATLAS_SCALE) as f32),
         LockedAxes::ROTATION_LOCKED,
+        GravityScale(0.0),
+        CollisionEventsEnabled,
+        // State management
+        DespawnOnExit(Screen::Gameplay),
     )
 }
-
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Reflect)]
-#[reflect(Component)]
-struct Player;
 
 fn record_player_directional_input(
     input: Res<ButtonInput<KeyCode>>,
