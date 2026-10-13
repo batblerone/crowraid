@@ -40,9 +40,9 @@ fn update_animation_timer(time: Res<Time>, mut query: Query<&mut PlayerAnimation
 
 /// Update the sprite direction and animation state (idling/walking).
 fn update_animation_movement(
-    mut player_query: Query<(&MovementController, &mut Sprite, &mut PlayerAnimation)>,
+    mut player_query: Query<(&MovementController, &mut PlayerAnimation)>,
 ) {
-    for (controller, mut sprite, mut animation) in &mut player_query {
+    for (controller, mut animation) in &mut player_query {
         let intent = controller.intent;
 
         // We now map movement to a direciton, instead of a animation set
@@ -136,13 +136,13 @@ pub enum PlayerDirection {
 
 impl PlayerAnimation {
     /// The number of idle frames.
-    const IDLE_FRAMES: usize = 2;
+    const _IDLE_FRAMES: usize = 2;
     /// The duration of each idle frame. Also used for directional animation.
     const IDLE_INTERVAL: Duration = Duration::from_millis(500);
     /// The number of walking frames.
-    const WALKING_FRAMES: usize = 6;
+    const _WALKING_FRAMES: usize = 6;
     /// The duration of each walking frame.
-    const WALKING_INTERVAL: Duration = Duration::from_millis(50);
+    const _WALKING_INTERVAL: Duration = Duration::from_millis(50);
     /// The number of frames per directional animation loop
     const FRAMES_PER_DIRECTION: usize = 1; // One frame each direction
 
