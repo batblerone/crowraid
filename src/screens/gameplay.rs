@@ -4,8 +4,8 @@ use avian2d::prelude::*;
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 
 use crate::{
-    game_manager::{PausableSystems, Pause, Menu},
     game::{level::*, player::*},
+    game_manager::{Menu, PausableSystems, Pause},
     screens::Screen,
 };
 
@@ -30,6 +30,8 @@ pub struct Health {
 }
 
 impl Health {
+    // This will be useful when we start saving things...
+    #[allow(dead_code)]
     pub fn new(max: f32) -> Self {
         Self { current: max, max }
     }
