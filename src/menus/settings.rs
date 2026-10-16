@@ -4,7 +4,7 @@
 
 use bevy::{audio::Volume, input::common_conditions::input_just_pressed, prelude::*};
 
-use crate::{menus::Menu, screens::Screen, theme::prelude::*};
+use crate::{audio::*, game_manager::Screen, menus::Menu, theme::prelude::*};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Menu::Settings), spawn_settings_menu);
@@ -15,7 +15,11 @@ pub(super) fn plugin(app: &mut App) {
 
     app.add_systems(
         Update,
-        update_global_volume_label.run_if(in_state(Menu::Settings)),
+        (
+            update_global_volume_label.run_if(in_state(Menu::Settings)),
+            update_music_volume_label.run_if(in_state(Menu::Settings)),
+            update_sfx_volume_label.run_if(in_state(Menu::Settings)),
+        ),
     );
 }
 
@@ -51,6 +55,22 @@ fn settings_grid() -> impl Bundle {
                 }
             ),
             global_volume_widget(),
+            (
+                widget::label("Sound Effects Volumne"),
+                Node {
+                    justify_self: JustifySelf::End,
+                    ..default()
+                }
+            ),
+            sound_effects_volume_widget(),
+            (
+                widget::label("Music Volume"),
+                Node {
+                    justify_self: JustifySelf::End,
+                    ..default()
+                }
+            ),
+            music_volume_widget(),
         ],
     )
 }
@@ -65,7 +85,7 @@ fn global_volume_widget() -> impl Bundle {
         children![
             widget::button_small("-", lower_global_volume),
             (
-                Name::new("Current Volume"),
+                Name::new("Current Global Volume"),
                 Node {
                     padding: UiRect::horizontal(px(10)),
                     justify_content: JustifyContent::Center,
@@ -74,6 +94,52 @@ fn global_volume_widget() -> impl Bundle {
                 children![(widget::label(""), GlobalVolumeLabel)],
             ),
             widget::button_small("+", raise_global_volume),
+        ],
+    )
+}
+
+fn sound_effects_volume_widget() -> impl Bundle {
+    (
+        Name::new("Sound Effects Volume Widget"),
+        Node {
+            justify_self: JustifySelf::Start,
+            ..default()
+        },
+        children![
+            widget::button_small("-", lower_sfx_volume),
+            (
+                Name::new("Current SFX Volume"),
+                Node {
+                    padding: UiRect::horizontal(px(10)),
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                children![(widget::label(""), SfxVolumeLabel)],
+            ),
+            widget::button_small("+", raise_sfx_volume),
+        ],
+    )
+}
+
+fn music_volume_widget() -> impl Bundle {
+    (
+        Name::new("Music Volume Widget"),
+        Node {
+            justify_self: JustifySelf::Start,
+            ..default()
+        },
+        children![
+            widget::button_small("-", lower_music_volume),
+            (
+                Name::new("Current Music Volume"),
+                Node {
+                    padding: UiRect::horizontal(px(10)),
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                children![(widget::label(""), MusicVolumeLabel)],
+            ),
+            widget::button_small("+", raise_music_volume),
         ],
     )
 }
@@ -91,9 +157,33 @@ fn raise_global_volume(_: On<Pointer<Click>>, mut global_volume: ResMut<GlobalVo
     global_volume.volume = Volume::Linear(linear);
 }
 
+fn lower_music_volume(_: On<Pointer<Click>>, mut audio_settings: ResMut<AudioSettings>) {
+    audio_settings.music_volume = (audio_settings.music_volume - 0.1).max(MIN_VOLUME);
+}
+
+fn raise_music_volume(_: On<Pointer<Click>>, mut audio_settings: ResMut<AudioSettings>) {
+    audio_settings.music_volume = (audio_settings.music_volume + 0.1).min(MAX_VOLUME);
+}
+
+fn lower_sfx_volume(_: On<Pointer<Click>>, mut audio_settings: ResMut<AudioSettings>) {
+    audio_settings.sfx_volume = (audio_settings.sfx_volume - 0.1).max(MIN_VOLUME);
+}
+
+fn raise_sfx_volume(_: On<Pointer<Click>>, mut audio_settings: ResMut<AudioSettings>) {
+    audio_settings.sfx_volume = (audio_settings.sfx_volume + 0.1).min(MAX_VOLUME);
+}
+
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 struct GlobalVolumeLabel;
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct MusicVolumeLabel;
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct SfxVolumeLabel;
 
 fn update_global_volume_label(
     global_volume: Res<GlobalVolume>,
@@ -101,6 +191,26 @@ fn update_global_volume_label(
 ) {
     let percent = 100.0 * global_volume.volume.to_linear();
     label.0 = format!("{percent:3.0}%");
+}
+
+fn update_music_volume_label(
+    audio_settings: Res<AudioSettings>,
+    mut label: Query<&mut Text, With<MusicVolumeLabel>>,
+) {
+    let percent = (100.0 * audio_settings.music_volume).round();
+    for mut text in &mut label {
+        text.0 = format!("{percent:3.0}%");
+    }
+}
+
+fn update_sfx_volume_label(
+    audio_settings: Res<AudioSettings>,
+    mut label: Query<&mut Text, With<SfxVolumeLabel>>,
+) {
+    let percent = (100.0 * audio_settings.sfx_volume).round();
+    for mut text in &mut label {
+        text.0 = format!("{percent:3.0}%");
+    }
 }
 
 fn go_back_on_click(
