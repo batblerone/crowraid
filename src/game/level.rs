@@ -9,7 +9,7 @@ use crate::{
     asset_tracking::LoadResource,
     audio::music,
     game::player::{PlayerAssets, player},
-    screens::*,
+    game_manager::Screen,
 };
 
 pub const SEGMENT_HEIGHT: f32 = 300.0;

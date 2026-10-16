@@ -4,9 +4,8 @@ use avian2d::prelude::*;
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 
 use crate::{
-    PausableSystems, Pause,
+    game_manager::{PausableSystems, Pause, Menu},
     game::{level::*, player::*},
-    menus::Menu,
     screens::Screen,
 };
 

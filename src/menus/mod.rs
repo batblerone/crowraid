@@ -5,6 +5,8 @@ mod main;
 mod pause;
 mod settings;
 
+use crate::game_manager::*;
+
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
@@ -16,14 +18,4 @@ pub(super) fn plugin(app: &mut App) {
         settings::plugin,
         pause::plugin,
     ));
-}
-
-#[derive(States, Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
-pub enum Menu {
-    #[default]
-    None,
-    Main,
-    Credits,
-    Settings,
-    Pause,
 }

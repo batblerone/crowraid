@@ -8,10 +8,12 @@ mod audio;
 #[cfg(feature = "dev")]
 mod dev_tools;
 mod game;
+mod game_manager;
 mod menus;
 mod screens;
 mod theme;
 
+use crate::game_manager::*;
 use avian2d::prelude::*;
 use bevy::{asset::AssetMetaCheck, prelude::*};
 
@@ -91,14 +93,6 @@ enum AppSystems {
     /// Do everything else (consider splitting this into further variants).
     Update,
 }
-
-/// Whether or not the game is paused.
-#[derive(States, Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
-struct Pause(pub bool);
-
-/// A system set for systems that shouldn't run while the game is paused.
-#[derive(SystemSet, Copy, Clone, Eq, PartialEq, Hash, Debug)]
-struct PausableSystems;
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((Name::new("Camera"), Camera2d));

@@ -20,7 +20,7 @@ use crate::{
         animation::PlayerAnimation,
         movement::{MovementController, ScreenWrap},
     },
-    screens::Screen,
+    game_manager::Screen,
     screens::gameplay::Health,
 };
 
