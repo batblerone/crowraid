@@ -12,7 +12,7 @@ use crate::{
     game_manager::Screen,
 };
 
-pub const SEGMENT_HEIGHT: f32 = 300.0;
+pub const SEGMENT_HEIGHT: f32 = 10.0;
 pub const SCROLL_SPEED: f32 = 300.0;
 pub const SCREEN_HALF_WIDTH: f32 = 600.0;
 pub const CHANNEL_WIDTH: f32 = 800.0;

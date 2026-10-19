@@ -18,6 +18,7 @@ use std::f32::consts::{FRAC_PI_2, TAU};
 use bevy::{color::palettes::css::*, prelude::*};
 
 use crate::asset_tracking::LoadResource;
+use crate::game::player::Player;
 use crate::screens::gameplay::Health;
 
 /// New enemies will appear this far above the screen.
@@ -83,16 +84,49 @@ pub fn enemy(kind: EnemyKind, position: Vec2, assets: &EnemyAssets) -> impl Scen
 }
 
 #[derive(Resource)]
-pub struct EnemeyTimer(Timer);
+pub struct EnemyTimer(Timer);
 
 fn random_enemy_gap() -> Timer {
-    Timer::from_seconds(0.4 + fastrand::f32() * (MAX_ENEMY_GAP - 0.5), TimerMode::Once)
+    Timer::from_seconds(
+        0.4 + fastrand::f32() * (MAX_ENEMY_GAP - 0.5),
+        TimerMode::Once,
+    )
 }
 
 fn reset_enemy_timer(mut commands: Commands) {
-    commands.insert_resource(EnemyTimer(random_gap()));
+    commands.insert_resource(EnemyTimer(random_enemy_gap()));
 }
 
+pub fn spawn_enemies(
+    mut commands: Commands,
+    time: Res<Time>,
+    assets: Res<EnemyAssets>,
+    timer: Option<ResMut<EnemyTimer>>,
+    player_query: Query<(&Player, &Transform)>,
+) {
+    let Some(mut timer) = timer else { return };
+    if !timer.0.tick(time.delta()).is_finished() {
+        return;
+    }
+    timer.0 = random_enemy_gap();
+
+    let Ok((player, player_transform)) = player_query.single() else {
+        return;
+    };
+
+    if player.dead {
+        return;
+    }
+
+    // match pick_enemy_kind() {
+    //     EnemyKind::Square => {
+    //         let spawn_x = (fastrand::f32() * 2.0 - 1.0);
+    //         commands.spawn_scene(enemy(EnemyKind::Square, Transform::from_translation()))
+    //     }
+    // }
+}
+
+/// From here on we are defining and implementing the assets for the enemies
 #[derive(Component, Reflect, Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 #[reflect(Component)]
 pub enum EnemyKind {
@@ -106,15 +140,32 @@ impl EnemyKind {
     pub fn enemy_stats(self) -> EnemyStats {
         match self {
             EnemyKind::Square => EnemyStats {
-                health: SQUARE_HEALTH, speed: SQUARE_SPEED, score: 0 , scale: SQUARE_SCALE
+                health: SQUARE_HEALTH,
+                speed: SQUARE_SPEED,
+                score: 0,
+                scale: SQUARE_SCALE,
             },
             EnemyKind::Triangle => EnemyStats {
-                health: TRI_HEALTH, speed: TRI_SPEED, score: 0, scale: TRI_SCALE
+                health: TRI_HEALTH,
+                speed: TRI_SPEED,
+                score: 0,
+                scale: TRI_SCALE,
             },
             EnemyKind::Donut => EnemyStats {
-                health: DONUT_HEALTH, speed: DONUT_SPEED, score: 0, scale: DONUT_SCALE
+                health: DONUT_HEALTH,
+                speed: DONUT_SPEED,
+                score: 0,
+                scale: DONUT_SCALE,
             },
         }
+    }
+}
+
+fn pick_enemy_kind() -> EnemyKind {
+    match fastrand::u32(0..100) {
+        0..40 => EnemyKind::Square,
+        40..75 => EnemyKind::Triangle,
+        _ => EnemyKind::Donut,
     }
 }
 
@@ -124,8 +175,6 @@ pub struct EnemyVisual {
     pub material: Handle<ColorMaterial>,
 }
 
-
-/// Defining and implementing the assets for the enemies
 #[derive(Resource, Asset, Clone, Reflect)]
 #[reflect(Resource)]
 pub struct EnemyAssets {

@@ -38,7 +38,9 @@ pub(super) fn plugin(app: &mut App) {
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Reflect)]
 #[reflect(Component)]
-pub struct Player;
+pub struct Player {
+    pub dead: bool
+}
 
 /// The player character.
 pub fn player(
@@ -61,7 +63,7 @@ pub fn player(
     // The bundle that actually defines the entity is here
     (
         Name::new("Player"),
-        Player,
+        Player { dead: false },
         Health {
             current: 100.0,
             max: 100.0,
