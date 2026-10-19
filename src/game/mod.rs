@@ -9,6 +9,7 @@ mod animation;
 pub mod level;
 mod movement;
 pub mod player;
+pub mod enemy;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins((
@@ -16,5 +17,6 @@ pub(super) fn plugin(app: &mut App) {
         level::plugin,
         movement::plugin,
         player::plugin,
+        enemy::plugin,
     ));
 }

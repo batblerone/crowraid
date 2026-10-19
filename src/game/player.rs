@@ -120,6 +120,7 @@ fn record_player_directional_input(
     }
 }
 
+/// Defining and implementing the assets for the player
 #[derive(Resource, Asset, Clone, Reflect)]
 #[reflect(Resource)]
 pub struct PlayerAssets {

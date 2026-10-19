@@ -23,15 +23,20 @@ pub struct HealthBarForeground;
 pub struct HealthBarOwner(pub Entity);
 
 /// A health component for damageable entities
-#[derive(Component)]
+#[derive(Component, Reflect, Clone)]
+#[reflect(Component)]
 pub struct Health {
     pub current: f32,
     pub max: f32,
 }
 
+impl Default for Health {
+    fn default() -> Self {
+        Self::new(1.0)
+    }
+}
+
 impl Health {
-    // This will be useful when we start saving things...
-    #[allow(dead_code)]
     pub fn new(max: f32) -> Self {
         Self { current: max, max }
     }
