@@ -139,7 +139,7 @@ fn entity_damage_wall_collision(
 
         // Now we also need a wall
         if channel_segment.contains(other_entity) {
-            println!("Wall is {}", other_entity);
+            // println!("Wall is {}", other_entity);
             if let Ok(mut health) = player_query.get_mut(player_entity) {
                 health.take_damage(5.0); // apply damage on colliding wall.
 

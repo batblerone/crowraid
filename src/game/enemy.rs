@@ -15,36 +15,58 @@
 
 use std::f32::consts::{FRAC_PI_2, TAU};
 
+use bevy::window::PrimaryWindow;
 use bevy::{color::palettes::css::*, prelude::*};
 
+use crate::AppSystems;
 use crate::asset_tracking::LoadResource;
 use crate::game::player::Player;
+use crate::game_manager::{PausableSystems, Screen};
 use crate::screens::gameplay::Health;
 
 /// New enemies will appear this far above the screen.
-const SPAWN_Y: f32 = 1088.0;
-/// A fall back despawn distance for enemies off screen
-const DESPAWN_Y: f32 = -1000.0;
+const SPAWN_Y_MARGIN: f32 = 64.0;
 /// The longest gap between an enemy spawn, the real gap is random
 const MAX_ENEMY_GAP: f32 = 10.0; // Seconds
+/// We want to keep spawns within the wall boundries (Half channel width: 400, +/- 150)
+const SPAWN_X_RANGE: f32 = 200.0;
+/// Margin for despawning enemies
+const OFFSCREEN_MARGIN: f32 = 128.0;
 
 /// Constants for the squarees
 const SQUARE_SPEED: f32 = 100.0;
 const SQUARE_HEALTH: f32 = 10.0;
-const SQUARE_SCALE: f32 = 3.0;
+const SQUARE_SCALE: f32 = 1.0;
 
 /// Constants for the triangles
 const TRI_SPEED: f32 = 300.0;
 const TRI_HEALTH: f32 = 50.0;
-const TRI_SCALE: f32 = 3.0;
+// How fast a triangle can turn it's direciton, in radians/second
+const TRI_TURN_RATE: f32 = 2.0;
+const TRI_SCALE: f32 = 1.0;
 
 /// Constants for the donuts
 const DONUT_SPEED: f32 = 500.0;
 const DONUT_HEALTH: f32 = 80.0;
-const DONUT_SCALE: f32 = 3.0;
+// How fast a donuts loop center sinks down the screen
+const DONUT_DECENT: f32 = 120.0;
+// Each donut will get a random lop size within this range
+const DONUT_MIN_RADIUS: f32 = 60.0;
+const DONUT_MAX_RADIUS: f32 = 120.0;
+const DONUT_SCALE: f32 = 1.0;
 
 pub fn plugin(app: &mut App) {
     app.load_resource::<EnemyAssets>();
+    app.add_systems(OnEnter(Screen::Gameplay), reset_enemy_timer);
+    app.add_systems(OnExit(Screen::Gameplay), despawn_enemies);
+    app.add_systems(
+        Update,
+        (spawn_enemies, move_enemies, despawn_offscreen_enemies)
+            .chain()
+            .run_if(in_state(Screen::Gameplay))
+            .in_set(AppSystems::Update)
+            .in_set(PausableSystems),
+    );
 }
 
 // The marker for enemies
@@ -60,12 +82,70 @@ pub struct EnemyStats {
     pub scale: f32,
 }
 
+/// A component to define how / where enemies are to move
+#[derive(Component, Reflect, Clone, Debug)]
+#[reflect(Component)]
+pub enum EnemyMotion {
+    /// Moves Straight at constant speed
+    Straight { speed: f32 },
+    /// Steers towards player, turing at a 'turn_rate' of radians per second.
+    Homing {
+        velocity: Vec2,
+        turn_rate: f32,
+        committed: bool, /* Has it locked on */
+    },
+    /// Circles an anchor point, where the anchor sinks down the screen
+    Looping {
+        anchor: Vec2,
+        phase: f32,
+        radius: f32,
+        angular_speed: f32,
+        descent: f32,
+    },
+}
+
+impl Default for EnemyMotion {
+    fn default() -> Self {
+        Self::Straight { speed: 0.0 }
+    }
+}
+
+/// A constructor is used to define each enemy kind motion starting state.
+impl EnemyMotion {
+    pub fn for_kind(kind: EnemyKind, spawn: Vec2) -> Self {
+        let speed = kind.enemy_stats().speed;
+        match kind {
+            EnemyKind::Square => Self::Straight { speed },
+            EnemyKind::Triangle => Self::Homing {
+                velocity: Vec2::NEG_Y * speed,
+                turn_rate: TRI_TURN_RATE,
+                committed: false,
+            },
+            EnemyKind::Donut => {
+                let radius =
+                    DONUT_MIN_RADIUS + fastrand::f32() * (DONUT_MAX_RADIUS - DONUT_MIN_RADIUS);
+                let phase = fastrand::f32() * TAU;
+                // Choose either clockwise or counter randomly
+                let direction = if fastrand::bool() { 1.0 } else { -1.0 };
+                Self::Looping {
+                    // Put the anchor where the donut is already on it's circle,
+                    // so there is no jumping in first frame.
+                    anchor: spawn - Vec2::from_angle(phase) * radius,
+                    phase,
+                    radius,
+                    angular_speed: direction * speed / radius,
+                    descent: DONUT_DECENT,
+                }
+            }
+        }
+    }
+}
 /// The scene definition of an enemy for our game, shared between all enemies within the game
 fn enemy_base(kind: EnemyKind) -> impl Scene {
     let health = kind.enemy_stats().health;
     bsn! {
         Enemy
-        template_value(kind)
+        kind
         Health { current: health, max: health }
     }
 }
@@ -73,13 +153,15 @@ fn enemy_base(kind: EnemyKind) -> impl Scene {
 /// One of any given kind of enemies
 pub fn enemy(kind: EnemyKind, position: Vec2, assets: &EnemyAssets) -> impl Scene {
     let EnemyVisual { mesh, material } = assets.enemy_visuals(kind).clone();
-    let translation = position.extend(0.0);
-    let scale = Vec3::splat(kind.enemy_stats().scale);
+    let transform = Transform::from_translation(position.extend(1.0))
+        .with_scale(Vec3::splat(kind.enemy_stats().scale));
+    let motion = EnemyMotion::for_kind(kind, position);
     bsn! {
-        enemy_base(kind)
+        @enemy_base(kind)
         Mesh2d(mesh)
         MeshMaterial2d::<ColorMaterial>(material)
-        Transform {translation: translation, scale: scale }
+        transform
+        motion
     }
 }
 
@@ -101,8 +183,9 @@ pub fn spawn_enemies(
     mut commands: Commands,
     time: Res<Time>,
     assets: Res<EnemyAssets>,
+    window: Single<&Window, With<PrimaryWindow>>,
     timer: Option<ResMut<EnemyTimer>>,
-    player_query: Query<(&Player, &Transform)>,
+    player_query: Query<&Player>,
 ) {
     let Some(mut timer) = timer else { return };
     if !timer.0.tick(time.delta()).is_finished() {
@@ -110,20 +193,92 @@ pub fn spawn_enemies(
     }
     timer.0 = random_enemy_gap();
 
-    let Ok((player, player_transform)) = player_query.single() else {
+    let Ok(player) = player_query.single() else {
         return;
     };
-
     if player.dead {
         return;
     }
 
-    // match pick_enemy_kind() {
-    //     EnemyKind::Square => {
-    //         let spawn_x = (fastrand::f32() * 2.0 - 1.0);
-    //         commands.spawn_scene(enemy(EnemyKind::Square, Transform::from_translation()))
-    //     }
-    // }
+    let kind = pick_enemy_kind();
+    let x = (fastrand::f32() * 2.0 - 1.0) * SPAWN_X_RANGE;
+    let y = window.height() / 2.0 + SPAWN_Y_MARGIN;
+    commands.spawn_scene(enemy(kind, Vec2::new(x, y), &assets));
+}
+
+/// Move enemeies according to game scope
+pub fn move_enemies(
+    player: Query<&Transform, (With<Player>, Without<Enemy>)>,
+    time: Res<Time>,
+    mut enemies: Query<(&mut EnemyMotion, &mut Transform), With<Enemy>>,
+) {
+    let dt = time.delta_secs();
+    let player_pos = player.single().ok().map(|t| t.translation.xy());
+
+    for (mut motion, mut transform) in &mut enemies {
+        let pos = transform.translation.xy();
+
+        let new_pos = match &mut *motion {
+            EnemyMotion::Straight { speed } => pos + Vec2::NEG_Y * *speed * dt,
+            EnemyMotion::Homing {
+                velocity,
+                turn_rate,
+                committed,
+            } => {
+                if let Some(target) = player_pos.filter(|_| !*committed) {
+                    if pos.y < target.y {
+                        // Once the entity is beyond player, ignore it and fly down
+                        *committed = true;
+                    } else {
+                        let max_turn = *turn_rate * dt;
+                        let turn = velocity.angle_to(target - pos).clamp(-max_turn, max_turn);
+                        *velocity = Vec2::from_angle(turn).rotate(*velocity);
+                    }
+                }
+                // The mesh nose points up (+Y), so - 90 degrees to face along velocity
+                transform.rotation = Quat::from_rotation_z(velocity.to_angle() - FRAC_PI_2);
+                pos + *velocity * dt
+            }
+
+            EnemyMotion::Looping {
+                anchor,
+                phase,
+                radius,
+                angular_speed,
+                descent,
+            } => {
+                anchor.y -= *descent * dt;
+                *phase = (*phase + *angular_speed * dt).rem_euclid(TAU);
+                *anchor + Vec2::from_angle(*phase) * *radius
+            }
+        };
+
+        transform.translation = new_pos.extend(transform.translation.z);
+    }
+}
+
+/// Removes enemy entities out of visible window
+pub fn despawn_offscreen_enemies(
+    mut commands: Commands,
+    window: Single<&Window, With<PrimaryWindow>>,
+    enemies: Query<(Entity, &Transform), With<Enemy>>,
+) {
+    let half = window.size() / 2.0 + OFFSCREEN_MARGIN;
+    for (entity, transform) in &enemies {
+        let pos = transform.translation.xy();
+        // only the bottom and sides are checked, enemys spawn top and move down
+        if pos.y < -half.y || pos.x.abs() > half.x {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// A helper for despawning enemy entities
+pub fn despawn_enemies(mut commands: Commands, enemies: Query<Entity, With<Enemy>>) {
+    for en in &enemies {
+        commands.entity(en).despawn();
+    }
+    commands.remove_resource::<EnemyTimer>();
 }
 
 /// From here on we are defining and implementing the assets for the enemies
@@ -209,7 +364,7 @@ impl FromWorld for EnemyAssets {
                     Vec2::new(-18.0, -14.0),
                     Vec2::new(18.0, -14.0),
                 )),
-                meshes.add(Annulus::new(10.0, 10.0)),
+                meshes.add(Annulus::new(10.0, 30.0)),
             )
         };
 
