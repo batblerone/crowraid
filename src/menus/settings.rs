@@ -147,29 +147,29 @@ fn music_volume_widget() -> impl Bundle {
 const MIN_VOLUME: f32 = 0.0;
 const MAX_VOLUME: f32 = 3.0;
 
-fn lower_global_volume(_: On<Pointer<Click>>, mut global_volume: ResMut<GlobalVolume>) {
+fn lower_global_volume(_: On<PointerClick>, mut global_volume: ResMut<GlobalVolume>) {
     let linear = (global_volume.volume.to_linear() - 0.1).max(MIN_VOLUME);
     global_volume.volume = Volume::Linear(linear);
 }
 
-fn raise_global_volume(_: On<Pointer<Click>>, mut global_volume: ResMut<GlobalVolume>) {
+fn raise_global_volume(_: On<PointerClick>, mut global_volume: ResMut<GlobalVolume>) {
     let linear = (global_volume.volume.to_linear() + 0.1).min(MAX_VOLUME);
     global_volume.volume = Volume::Linear(linear);
 }
 
-fn lower_music_volume(_: On<Pointer<Click>>, mut audio_settings: ResMut<AudioSettings>) {
+fn lower_music_volume(_: On<PointerClick>, mut audio_settings: ResMut<AudioSettings>) {
     audio_settings.music_volume = (audio_settings.music_volume - 0.1).max(MIN_VOLUME);
 }
 
-fn raise_music_volume(_: On<Pointer<Click>>, mut audio_settings: ResMut<AudioSettings>) {
+fn raise_music_volume(_: On<PointerClick>, mut audio_settings: ResMut<AudioSettings>) {
     audio_settings.music_volume = (audio_settings.music_volume + 0.1).min(MAX_VOLUME);
 }
 
-fn lower_sfx_volume(_: On<Pointer<Click>>, mut audio_settings: ResMut<AudioSettings>) {
+fn lower_sfx_volume(_: On<PointerClick>, mut audio_settings: ResMut<AudioSettings>) {
     audio_settings.sfx_volume = (audio_settings.sfx_volume - 0.1).max(MIN_VOLUME);
 }
 
-fn raise_sfx_volume(_: On<Pointer<Click>>, mut audio_settings: ResMut<AudioSettings>) {
+fn raise_sfx_volume(_: On<PointerClick>, mut audio_settings: ResMut<AudioSettings>) {
     audio_settings.sfx_volume = (audio_settings.sfx_volume + 0.1).min(MAX_VOLUME);
 }
 
@@ -214,7 +214,7 @@ fn update_sfx_volume_label(
 }
 
 fn go_back_on_click(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     screen: Res<State<Screen>>,
     mut next_menu: ResMut<NextState<Menu>>,
 ) {

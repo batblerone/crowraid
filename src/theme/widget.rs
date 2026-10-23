@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use bevy::{
+    {picking::hover::Hovered, ui_widgets::Button},
     ecs::{spawn::SpawnWith, system::IntoObserverSystem},
     prelude::*,
 };
@@ -49,11 +50,10 @@ pub fn label(text: impl Into<String>) -> impl Bundle {
 }
 
 /// A large rounded button with text and an action defined as an [`Observer`].
-pub fn button<E, B, M, I>(text: impl Into<String>, action: I) -> impl Bundle
+pub fn button<E, M, I>(text: impl Into<String>, action: I) -> impl Bundle
 where
     E: EntityEvent,
-    B: Bundle,
-    I: IntoObserverSystem<E, B, M>,
+    I: IntoObserverSystem<E, M>,
 {
     button_base(
         text,
@@ -70,11 +70,10 @@ where
 }
 
 /// A small square button with text and an action defined as an [`Observer`].
-pub fn button_small<E, B, M, I>(text: impl Into<String>, action: I) -> impl Bundle
+pub fn button_small<E, M, I>(text: impl Into<String>, action: I) -> impl Bundle
 where
     E: EntityEvent,
-    B: Bundle,
-    I: IntoObserverSystem<E, B, M>,
+    I: IntoObserverSystem<E, M>,
 {
     button_base(
         text,
@@ -90,15 +89,14 @@ where
 }
 
 /// A simple button with text and an action defined as an [`Observer`]. The button's layout is provided by `button_bundle`.
-fn button_base<E, B, M, I>(
+fn button_base<E, M, I>(
     text: impl Into<String>,
     action: I,
     button_bundle: impl Bundle,
 ) -> impl Bundle
 where
     E: EntityEvent,
-    B: Bundle,
-    I: IntoObserverSystem<E, B, M>,
+    I: IntoObserverSystem<E, M>,
 {
     let text = text.into();
     let action = IntoObserverSystem::into_system(action);
@@ -110,6 +108,7 @@ where
                 .spawn((
                     Name::new("Button Inner"),
                     Button,
+                    Hovered::default(),
                     BackgroundColor(BUTTON_BACKGROUND),
                     InteractionPalette {
                         none: BUTTON_BACKGROUND,
