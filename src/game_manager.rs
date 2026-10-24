@@ -43,3 +43,4 @@ pub struct GameManager {
     pub master_volume: f32,
     pub fullscreen: f32,
 }
+

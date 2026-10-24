@@ -31,7 +31,7 @@ pub(super) fn plugin(app: &mut App) {
 /// These are the movement parameters for our character controller.
 /// For now, this is only used for a single player, but it could power NPCs or
 /// other players as well.
-#[derive(Component, Reflect)]
+#[derive(Component, Reflect, Clone)]
 #[reflect(Component)]
 pub struct MovementController {
     /// The direction the character wants to move in.
@@ -58,7 +58,7 @@ fn apply_movement(mut movement_query: Query<(&MovementController, &mut LinearVel
     }
 }
 
-#[derive(Component, Reflect)]
+#[derive(Component, Reflect, Clone, Default)]
 #[reflect(Component)]
 pub struct ScreenWrap;
 

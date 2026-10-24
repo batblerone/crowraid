@@ -30,6 +30,11 @@ pub struct Health {
     pub max: f32,
 }
 
+/// Just a marker for when players die
+#[derive(Component, Reflect, Default, Clone)]
+#[reflect(Component)]
+pub struct IsDead;
+
 impl Default for Health {
     fn default() -> Self {
         Self::new(1.0)
@@ -45,13 +50,39 @@ impl Health {
         self.current = (self.current - amount).max(0.0);
     }
 
-    pub fn is_alive(&mut self) -> bool {
+    pub fn is_alive(&self) -> bool {
         self.current > 0.0
     }
 
     // Returns health as a ratio [0, 1]
     pub fn h_ratio(&self) -> f32 {
         self.current / self.max
+    }
+}
+
+pub fn mark_dead(
+    mut commands: Commands,
+    query: Query<(Entity, &Health), (Changed<Health>, Without<IsDead>)>,
+) {
+    for (entity, health) in &query {
+        if !health.is_alive() {
+            commands.entity(entity).insert(IsDead);
+        }
+    }
+}
+
+/// Decides what happens when something dies.
+fn handle_deaths(
+    mut commands: Commands,
+    dead: Query<(Entity, Has<Player>), Added<IsDead>>,
+    mut next_screen: ResMut<NextState<Screen>>,
+) {
+    for (entity, is_player) in &dead {
+        if is_player {
+            next_screen.set(Screen::Title);
+        } else {
+            commands.entity(entity).despawn();
+        }
     }
 }
 
@@ -84,6 +115,12 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(Menu::None),
         unpause.run_if(in_state(Screen::Gameplay)),
+    );
+    app.add_systems(
+        PostUpdate,
+        (mark_dead, handle_deaths)
+            .chain()
+            .run_if(in_state(Screen::Gameplay)),
     );
 }
 
