@@ -111,7 +111,7 @@ fn trigger_step_sound_effect(
 
 /// Component that tracks player's animation state.
 /// It is tightly bound to the texture atlas we use.
-#[derive(Component, Reflect)]
+#[derive(Component, Reflect, Clone, Default)]
 #[reflect(Component)]
 pub struct PlayerAnimation {
     timer: Timer,
@@ -125,8 +125,9 @@ pub enum PlayerAnimationState {
     Walking,
 }
 
-#[derive(Reflect, PartialEq, Eq, Clone, Copy)]
+#[derive(Reflect, PartialEq, Eq, Clone, Copy, Default)]
 pub enum PlayerDirection {
+    #[default]
     Neutral,
     Up,
     Down,
@@ -145,6 +146,10 @@ impl PlayerAnimation {
     const _WALKING_INTERVAL: Duration = Duration::from_millis(50);
     /// The number of frames per directional animation loop
     const FRAMES_PER_DIRECTION: usize = 1; // One frame each direction
+    
+    fn default() -> Self {
+        Self::idling()
+    }
 
     fn idling() -> Self {
         Self {
