@@ -4,7 +4,7 @@ use avian2d::prelude::*;
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 
 use crate::{
-    game::{level::*, player::*},
+    game::{enemy::*, level::*, player::*},
     game_manager::{Menu, PausableSystems, Pause},
     screens::Screen,
 };
@@ -106,7 +106,7 @@ pub(super) fn plugin(app: &mut App) {
                     .and_then(not(in_state(Menu::None)))
                     .and_then(input_just_pressed(KeyCode::KeyP)),
             ),
-            entity_damage_wall_collision.in_set(PausableSystems),
+            wall_collisions_damage_player.in_set(PausableSystems),
             spawn_healthbars,
             update_healthbars,
         ),
@@ -154,7 +154,7 @@ fn close_menu(mut next_menu: ResMut<NextState<Menu>>) {
     next_menu.set(Menu::None);
 }
 
-fn entity_damage_wall_collision(
+fn wall_collisions_damage_player(
     mut collision_reader: MessageReader<CollisionStart>,
     mut player_query: Query<&mut Health, With<Player>>,
     channel_segment: Query<&Wall>,
@@ -188,6 +188,30 @@ fn entity_damage_wall_collision(
                 }
             }
         }
+    }
+}
+
+fn character_collisions_damage_each(
+    mut collision_reader: MessageReader<CollisionStart>,
+    mut player_query: Query<&mut Health, (With<Player>, Without<IsDead>)>,
+    mut enemy_query: Query<&mut Health, (With<Enemy>, Without<IsDead>)>,
+    mut next_screen: ResMut<NextState<Screen>>,
+) {
+    // Subtract health from colliding characters.
+    todo!();
+    // find out which entity is which, then do collision stuff
+    for event in collision_reader.read() {
+        let entity1 = event.collider1;
+        let entity2 = event.collider2;
+
+        // Is there a player? And who be that player?
+        let (player_entity, other_entity) = if player_query.contains(entity1) {
+            (entity1, entity2)
+        } else if player_query.contains(entity2) {
+            (entity2, entity1)
+        } else {
+            continue; // None of them colliders was a player, boo hoo skip
+        };
     }
 }
 
