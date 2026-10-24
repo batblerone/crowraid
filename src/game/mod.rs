@@ -10,6 +10,8 @@ pub mod level;
 mod movement;
 pub mod player;
 pub mod enemy;
+pub mod projectile;
+pub mod physics;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins((
@@ -18,5 +20,6 @@ pub(super) fn plugin(app: &mut App) {
         movement::plugin,
         player::plugin,
         enemy::plugin,
+        projectile::plugin,
     ));
 }

@@ -1,14 +1,8 @@
 //! Player-specific behavior.
 
-///Player Specific Constants
-const PLAYER_ATLAS_ROWS: u32 = 5;
-const PLAYER_ATLAS_COL: u32 = 1;
+/// Atlas constants
 const ATLAS_HEIGHT: u32 = 64;
 const ATLAS_WIDTH: u32 = 64;
-const ATLAS_SCALE: f32 = 1.0;
-/// Gap in pixels from between frames within image. This is 'padding' argument of
-///  'TextureAtlasLayout::from_grid', not a scale value.
-const ATLAS_PADDING: u32 = 1;
 
 use avian2d::prelude::*;
 use bevy::{
@@ -23,6 +17,7 @@ use crate::{
         animation::PlayerAnimation,
         movement::{MovementController, ScreenWrap},
         physics::*,
+        projectile::*,
     },
     game_manager::Screen,
     screens::gameplay::Health,
@@ -51,7 +46,6 @@ pub struct PlayerStats {
     pub health: f32,
     pub speed: f32,
     pub scale: f32,
-    pub dead: bool,
     pub collider_rad: f32,
 }
 
@@ -99,7 +93,6 @@ impl PlayerKind {
                 health: 100.0,
                 speed: 400.0,
                 scale: 1.0,
-                dead: false,
                 collider_rad: 64.0,
             },
         }
@@ -148,6 +141,7 @@ pub fn player(kind: PlayerKind, assets: &PlayerAssets) -> impl Scene  {
     let layout = assets.layout(kind);
     let index = animation.get_atlas_index();
     let transform = Transform::from_scale(Vec3::splat(kind.player_stats().scale));
+    let gun = Gun::player();
     bsn! {
         @player_base_scene(kind)
         // Sprite is it's own thing in bsn!. So using the sprite function of bsn
@@ -169,6 +163,7 @@ pub fn player(kind: PlayerKind, assets: &PlayerAssets) -> impl Scene  {
         }
         transform
         animation
+        gun
     }
 }
 
