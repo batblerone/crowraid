@@ -15,14 +15,17 @@
 
 use std::f32::consts::{FRAC_PI_2, TAU};
 
+use avian2d::collision::collider::Collider;
 use bevy::window::PrimaryWindow;
 use bevy::{color::palettes::css::*, prelude::*};
+use avian2d::prelude::*;
 
 use crate::AppSystems;
 use crate::asset_tracking::LoadResource;
 use crate::game::player::Player;
 use crate::game_manager::{PausableSystems, Screen};
-use crate::screens::gameplay::Health;
+use crate::screens::gameplay::{Health, IsDead};
+use crate::game::physics::*;
 
 /// New enemies will appear this far above the screen.
 const SPAWN_Y_MARGIN: f32 = 64.0;
@@ -58,7 +61,6 @@ const DONUT_SCALE: f32 = 1.0;
 pub fn plugin(app: &mut App) {
     app.load_resource::<EnemyAssets>();
     app.add_systems(OnEnter(Screen::Gameplay), reset_enemy_timer);
-    app.add_systems(OnExit(Screen::Gameplay), despawn_enemies);
     app.add_systems(
         Update,
         (spawn_enemies, move_enemies, despawn_offscreen_enemies)
@@ -69,17 +71,18 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-// The marker for enemies
-#[derive(Component, Reflect, Default, Clone)]
-#[reflect(Component)]
-pub struct Enemy;
+#[derive(Resource)]
+pub struct EnemyTimer(Timer);
 
-// A match struct for enemy stats to build within scenes
-pub struct EnemyStats {
-    pub health: f32,
-    pub speed: f32,
-    pub score: u32,
-    pub scale: f32,
+fn random_enemy_gap() -> Timer {
+    Timer::from_seconds(
+        0.4 + fastrand::f32() * (MAX_ENEMY_GAP - 0.5),
+        TimerMode::Once,
+    )
+}
+
+fn reset_enemy_timer(mut commands: Commands) {
+    commands.insert_resource(EnemyTimer(random_enemy_gap()));
 }
 
 /// A component to define how / where enemies are to move
@@ -140,6 +143,76 @@ impl EnemyMotion {
         }
     }
 }
+
+// The marker for enemies
+#[derive(Component, Reflect, Default, Clone)]
+#[reflect(Component)]
+pub struct Enemy;
+
+// A match struct for enemy stats to build within scenes
+pub struct EnemyStats {
+    pub health: f32,
+    pub speed: f32,
+    #[allow(dead_code)] // This will come into play once projectiles are set up.
+    pub score: u32,
+    pub scale: f32,
+}
+
+/// From here on we are defining and implementing the assets for the enemies
+#[derive(Component, Reflect, Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[reflect(Component)]
+pub enum EnemyKind {
+    #[default]
+    Square,
+    Triangle,
+    Donut,
+}
+
+impl EnemyKind {
+    pub fn enemy_stats(self) -> EnemyStats {
+        match self {
+            EnemyKind::Square => EnemyStats {
+                health: SQUARE_HEALTH,
+                speed: SQUARE_SPEED,
+                score: 0,
+                scale: SQUARE_SCALE,
+            },
+            EnemyKind::Triangle => EnemyStats {
+                health: TRI_HEALTH,
+                speed: TRI_SPEED,
+                score: 0,
+                scale: TRI_SCALE,
+            },
+            EnemyKind::Donut => EnemyStats {
+                health: DONUT_HEALTH,
+                speed: DONUT_SPEED,
+                score: 0,
+                scale: DONUT_SCALE,
+            },
+        }
+    }
+    
+    pub fn enemy_collider(self) -> Collider {
+        match self {
+            EnemyKind::Square => Collider::rectangle(32.0, 32.0),
+            EnemyKind::Triangle => Collider::triangle(
+                Vec2::new(0.0, 20.0),
+                Vec2::new(-18.0, -14.0),
+                Vec2::new(18.0, -14.0),
+            ),
+            EnemyKind::Donut => Collider::circle(30.0),
+        }
+    }
+}
+
+fn pick_enemy_kind() -> EnemyKind {
+    match fastrand::u32(0..100) {
+        0..40 => EnemyKind::Square,
+        40..75 => EnemyKind::Triangle,
+        _ => EnemyKind::Donut,
+    }
+}
+
 /// The scene definition of an enemy for our game, shared between all enemies within the game
 fn enemy_base(kind: EnemyKind) -> impl Scene {
     let health = kind.enemy_stats().health;
@@ -156,27 +229,21 @@ pub fn enemy(kind: EnemyKind, position: Vec2, assets: &EnemyAssets) -> impl Scen
     let transform = Transform::from_translation(position.extend(1.0))
         .with_scale(Vec3::splat(kind.enemy_stats().scale));
     let motion = EnemyMotion::for_kind(kind, position);
+    let collider = kind.enemy_collider();
+    let layers = GameLayer::enemy_layers();
+    let despawn = DespawnOnExit(Screen::Gameplay);
     bsn! {
         @enemy_base(kind)
         Mesh2d(mesh)
         MeshMaterial2d::<ColorMaterial>(material)
         transform
         motion
+        RigidBody::Kinematic
+        collider
+        layers
+        CollisionEventsEnabled
+        despawn
     }
-}
-
-#[derive(Resource)]
-pub struct EnemyTimer(Timer);
-
-fn random_enemy_gap() -> Timer {
-    Timer::from_seconds(
-        0.4 + fastrand::f32() * (MAX_ENEMY_GAP - 0.5),
-        TimerMode::Once,
-    )
-}
-
-fn reset_enemy_timer(mut commands: Commands) {
-    commands.insert_resource(EnemyTimer(random_enemy_gap()));
 }
 
 pub fn spawn_enemies(
@@ -185,20 +252,15 @@ pub fn spawn_enemies(
     assets: Res<EnemyAssets>,
     window: Single<&Window, With<PrimaryWindow>>,
     timer: Option<ResMut<EnemyTimer>>,
-    player_query: Query<&Player>,
+    player_query: Query<(), (With<Player>, Without<IsDead>)>,
 ) {
     let Some(mut timer) = timer else { return };
     if !timer.0.tick(time.delta()).is_finished() {
         return;
     }
     timer.0 = random_enemy_gap();
-
-    let Ok(player) = player_query.single() else {
-        return;
-    };
-    if player.dead {
-        return;
-    }
+    
+    if player_query.single().is_err() { return; };
 
     let kind = pick_enemy_kind();
     let x = (fastrand::f32() * 2.0 - 1.0) * SPAWN_X_RANGE;
@@ -208,14 +270,15 @@ pub fn spawn_enemies(
 
 /// Move enemeies according to game scope
 pub fn move_enemies(
-    player: Query<&Transform, (With<Player>, Without<Enemy>)>,
+    player: Query<&Transform, (With<Player>, Without<Enemy>, Without<IsDead>)>,
     time: Res<Time>,
-    mut enemies: Query<(&mut EnemyMotion, &mut Transform), With<Enemy>>,
+    mut enemies: Query<(&mut EnemyMotion, &mut Transform, &mut LinearVelocity), With<Enemy>>,
 ) {
     let dt = time.delta_secs();
+    if dt <= 0.0 { return; }; // Don't divide by zero in first frame
     let player_pos = player.single().ok().map(|t| t.translation.xy());
 
-    for (mut motion, mut transform) in &mut enemies {
+    for (mut motion, mut transform, mut velocity) in &mut enemies {
         let pos = transform.translation.xy();
 
         let new_pos = match &mut *motion {
@@ -252,8 +315,8 @@ pub fn move_enemies(
                 *anchor + Vec2::from_angle(*phase) * *radius
             }
         };
-
-        transform.translation = new_pos.extend(transform.translation.z);
+        
+        velocity.0 = (new_pos - pos) / dt;
     }
 }
 
@@ -270,57 +333,6 @@ pub fn despawn_offscreen_enemies(
         if pos.y < -half.y || pos.x.abs() > half.x {
             commands.entity(entity).despawn();
         }
-    }
-}
-
-/// A helper for despawning enemy entities
-pub fn despawn_enemies(mut commands: Commands, enemies: Query<Entity, With<Enemy>>) {
-    for en in &enemies {
-        commands.entity(en).despawn();
-    }
-    commands.remove_resource::<EnemyTimer>();
-}
-
-/// From here on we are defining and implementing the assets for the enemies
-#[derive(Component, Reflect, Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
-#[reflect(Component)]
-pub enum EnemyKind {
-    #[default]
-    Square,
-    Triangle,
-    Donut,
-}
-
-impl EnemyKind {
-    pub fn enemy_stats(self) -> EnemyStats {
-        match self {
-            EnemyKind::Square => EnemyStats {
-                health: SQUARE_HEALTH,
-                speed: SQUARE_SPEED,
-                score: 0,
-                scale: SQUARE_SCALE,
-            },
-            EnemyKind::Triangle => EnemyStats {
-                health: TRI_HEALTH,
-                speed: TRI_SPEED,
-                score: 0,
-                scale: TRI_SCALE,
-            },
-            EnemyKind::Donut => EnemyStats {
-                health: DONUT_HEALTH,
-                speed: DONUT_SPEED,
-                score: 0,
-                scale: DONUT_SCALE,
-            },
-        }
-    }
-}
-
-fn pick_enemy_kind() -> EnemyKind {
-    match fastrand::u32(0..100) {
-        0..40 => EnemyKind::Square,
-        40..75 => EnemyKind::Triangle,
-        _ => EnemyKind::Donut,
     }
 }
 

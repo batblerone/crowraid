@@ -8,7 +8,7 @@ use crate::{
     PausableSystems,
     asset_tracking::LoadResource,
     audio::music,
-    game::player::{PlayerAssets, player},
+    game::player::{PlayerAssets, SelectedPlayer, player},
     game_manager::Screen,
 };
 
@@ -78,6 +78,7 @@ pub fn spawn_level(
     mut commands: Commands,
     level_assets: Res<LevelAssets>,
     player_assets: Res<PlayerAssets>,
+    selected: ResMut<SelectedPlayer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut config: ResMut<ChannelGeneratorConfig>,
 ) {
@@ -88,14 +89,14 @@ pub fn spawn_level(
         Transform::default(),
         Visibility::default(),
         DespawnOnExit(Screen::Gameplay),
-        children![
-            player(400.0, &player_assets, &mut texture_atlas_layouts),
-            (
-                Name::new("Gameplay Music"),
-                music(level_assets.music.clone())
-            ),
-        ],
+        children![(
+            Name::new("Gameplay Music"),
+            music(level_assets.music.clone())
+        ),],
     ));
+
+    // Since player is a scene now, we spawn it as it's own thing
+    commands.spawn_scene(player(selected.0, &player_assets));
 
     // Spawn some stuff immediately so you don't get blank screen on load
     let initial_segments = ((800.0 - (-400.0)) / SEGMENT_HEIGHT).ceil() as i32;
