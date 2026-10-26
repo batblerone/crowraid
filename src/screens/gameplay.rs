@@ -5,6 +5,7 @@ use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 
 use crate::{
     game::{enemy::*, level::*, player::*},
+    game::score::{PointValue, EnemyDefeated},
     game_manager::{Menu, PausableSystems, Pause},
     screens::Screen,
 };
@@ -72,17 +73,28 @@ pub fn mark_dead(
 }
 
 /// Decides what happens when something dies.
+///
+/// This is the one place that confirms kills. Also means where kills are reported to score.
+/// Enemies that leave the screen are despawned by `despawn_offscreen_enemies` instead and
+/// never get here.
 fn handle_deaths(
     mut commands: Commands,
-    dead: Query<(Entity, Has<Player>), Added<IsDead>>,
+    dead: Query<(Entity, Has<Player>, Option<&PointValue>, &Transform), Added<IsDead>>,
+    mut defeated: MessageWriter<EnemyDefeated>,
     mut next_screen: ResMut<NextState<Screen>>,
 ) {
-    for (entity, is_player) in &dead {
+    for (entity, is_player, points, transform) in &dead {
         if is_player {
             next_screen.set(Screen::Title);
-        } else {
-            commands.entity(entity).despawn();
+            continue;
         }
+        if let Some(points) = points {
+            defeated.write(EnemyDefeated {
+                points: points.0,
+                position: transform.translation.xy(),
+            });
+        }
+        commands.entity(entity).despawn();
     }
 }
 

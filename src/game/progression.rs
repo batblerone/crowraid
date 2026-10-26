@@ -1,0 +1,106 @@
+//! Level progression: watches the score and decides when a boss should appear.
+//! 
+//! The boss doesn't exist yet, for now this module only keeps the accounting and 
+//! sends the appropriate [`BossThresholdReached`] message once per level. A boss
+//! spawner can be dropped in later without touching any of the score code.
+
+use bevy::prelude::*;
+
+use crate::{
+    game::score::{Score, add_points_for_kills},
+    game_manager::Screen,
+};
+
+/// Points needed before the first boss shows up
+const FIRST_BOSS_AT: u32 = 500;
+/// After a boss is beaten, the next one needs this many more points
+/// TODO: add more progression later
+const POINTS_BETWEEN_BOSSES: u32 = 750;
+
+pub(super) fn plugin(app: &mut App) {
+    app.init_resource::<LevelProgress>();
+    app.add_message::<BossThresholdReached>();
+    
+    app.add_systems(OnEnter(Screen::Gameplay), reset_progress);
+    app.add_systems(
+        Update,
+        (
+            check_boss_threshold.run_if(resource_changed::<Score>),
+            spawn_boss,
+        )
+        .chain()
+        // Look at score after this frames kills have been processed
+        .after(add_points_for_kills)
+        .run_if(in_state(Screen::Gameplay))
+    );
+}
+
+/// Where the player is in the level progression
+#[derive(Resource, Debug)]
+pub struct LevelProgress {
+    /// Starts at 1, goes up each time a boss is beaten
+    pub level: u32,
+    /// jthe score that summons this level's boss
+    pub boss_threshold: u32,
+    /// True from the moment the threshold is hit until the boss is beaten.
+    /// Stops the same boss being summoned again while points keep coming in.
+    pub boss_active: bool,
+}
+
+impl Default for LevelProgress {
+    fn default() -> Self {
+        Self {
+            level: 1,
+            boss_threshold: FIRST_BOSS_AT,
+            boss_active: false,
+        }
+    }
+}
+
+impl LevelProgress {
+    /// Call this when the boss dies. The next threshold is counted from the
+    /// score at the moment it is called. A big boss reward can't instantly 
+    /// summon the next boss.
+    #[allow(dead_code)] // fuse once bosses exist.
+    pub fn advance(&mut self, current_score: u32) {
+        self.level += 1;
+        self.boss_threshold = current_score.saturating_add(POINTS_BETWEEN_BOSSES);
+        self.boss_active = false;
+    }
+}
+
+/// jsent once when the score reaches the current level's boss threshold.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct BossThresholdReached {
+    pub level: u32,
+}
+
+pub fn reset_progress(mut progress: ResMut<LevelProgress>) {
+    *progress = LevelProgress::default();
+}
+
+pub fn check_boss_threshold(
+    score: Res<Score>,
+    mut progress: ResMut<LevelProgress>,
+    mut reached: MessageWriter<BossThresholdReached>,
+) {
+    // `>=`, not `==`: kills are worth 10, 25, or 50, so the score usually
+    // jump over the exact threshold rather than lands
+    if progress.boss_active || score.current < progress.boss_threshold {
+        return;
+    }
+    
+    progress.boss_active = true;
+    reached.write(BossThresholdReached {
+        level: progress.level,
+    });
+}
+
+/// TODO: Spawn the actual boss here...
+pub fn spawn_boss(mut reached: MessageReader<BossThresholdReached>) {
+    for boss in reached.read() {
+        info!(
+            "Score threshold reached: Prepare to face the ultimate demise, level {} boss is coming", boss.level
+        );
+    }
+}

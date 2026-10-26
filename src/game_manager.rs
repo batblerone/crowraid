@@ -35,9 +35,9 @@ pub struct PausableSystems;
 /// The game manager struct, tracking score and other game globals
 pub struct GameManager {
     pub screen: Screen,
-    pub score_increase_rate: f32,
-    pub current_score: f32,
-    pub high_score: f32,
+    pub score_increase_rate: u32,
+    pub current_score: u32,
+    pub high_score: u32,
     pub music_volume: f32,
     pub sfx_volume: f32,
     pub master_volume: f32,

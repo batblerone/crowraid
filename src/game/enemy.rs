@@ -16,16 +16,15 @@
 use std::f32::consts::{FRAC_PI_2, TAU};
 
 use avian2d::collision::collider::Collider;
+use avian2d::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::{color::palettes::css::*, prelude::*};
-use avian2d::prelude::*;
 
 use crate::AppSystems;
 use crate::asset_tracking::LoadResource;
-use crate::game::player::Player;
+use crate::game::{physics::*, player::Player, score::PointValue};
 use crate::game_manager::{PausableSystems, Screen};
 use crate::screens::gameplay::{Health, IsDead};
-use crate::game::physics::*;
 
 /// New enemies will appear this far above the screen.
 const SPAWN_Y_MARGIN: f32 = 64.0;
@@ -39,6 +38,7 @@ const OFFSCREEN_MARGIN: f32 = 128.0;
 /// Constants for the squarees
 const SQUARE_SPEED: f32 = 100.0;
 const SQUARE_HEALTH: f32 = 10.0;
+const SQUARE_POINTS: u32 = 10;
 const SQUARE_SCALE: f32 = 1.0;
 
 /// Constants for the triangles
@@ -46,6 +46,7 @@ const TRI_SPEED: f32 = 300.0;
 const TRI_HEALTH: f32 = 50.0;
 // How fast a triangle can turn it's direciton, in radians/second
 const TRI_TURN_RATE: f32 = 2.0;
+const TRI_POINTS: u32 = 20;
 const TRI_SCALE: f32 = 1.0;
 
 /// Constants for the donuts
@@ -56,6 +57,7 @@ const DONUT_DECENT: f32 = 120.0;
 // Each donut will get a random lop size within this range
 const DONUT_MIN_RADIUS: f32 = 60.0;
 const DONUT_MAX_RADIUS: f32 = 120.0;
+const DONUT_POINTS: u32 = 50;
 const DONUT_SCALE: f32 = 1.0;
 
 pub fn plugin(app: &mut App) {
@@ -153,8 +155,7 @@ pub struct Enemy;
 pub struct EnemyStats {
     pub health: f32,
     pub speed: f32,
-    #[allow(dead_code)] // This will come into play once projectiles are set up.
-    pub score: u32,
+    pub points: u32,
     pub scale: f32,
 }
 
@@ -174,24 +175,24 @@ impl EnemyKind {
             EnemyKind::Square => EnemyStats {
                 health: SQUARE_HEALTH,
                 speed: SQUARE_SPEED,
-                score: 0,
+                points: SQUARE_POINTS,
                 scale: SQUARE_SCALE,
             },
             EnemyKind::Triangle => EnemyStats {
                 health: TRI_HEALTH,
                 speed: TRI_SPEED,
-                score: 0,
+                points: TRI_POINTS,
                 scale: TRI_SCALE,
             },
             EnemyKind::Donut => EnemyStats {
                 health: DONUT_HEALTH,
                 speed: DONUT_SPEED,
-                score: 0,
+                points: DONUT_POINTS,
                 scale: DONUT_SCALE,
             },
         }
     }
-    
+
     pub fn enemy_collider(self) -> Collider {
         match self {
             EnemyKind::Square => Collider::rectangle(32.0, 32.0),
@@ -215,11 +216,14 @@ fn pick_enemy_kind() -> EnemyKind {
 
 /// The scene definition of an enemy for our game, shared between all enemies within the game
 fn enemy_base(kind: EnemyKind) -> impl Scene {
+    let stats = kind.enemy_stats();
     let health = kind.enemy_stats().health;
+    let points = PointValue(stats.points);
     bsn! {
         Enemy
         kind
         Health { current: health, max: health }
+        points
     }
 }
 
@@ -259,8 +263,10 @@ pub fn spawn_enemies(
         return;
     }
     timer.0 = random_enemy_gap();
-    
-    if player_query.single().is_err() { return; };
+
+    if player_query.single().is_err() {
+        return;
+    };
 
     let kind = pick_enemy_kind();
     let x = (fastrand::f32() * 2.0 - 1.0) * SPAWN_X_RANGE;
@@ -275,7 +281,9 @@ pub fn move_enemies(
     mut enemies: Query<(&mut EnemyMotion, &mut Transform, &mut LinearVelocity), With<Enemy>>,
 ) {
     let dt = time.delta_secs();
-    if dt <= 0.0 { return; }; // Don't divide by zero in first frame
+    if dt <= 0.0 {
+        return;
+    }; // Don't divide by zero in first frame
     let player_pos = player.single().ok().map(|t| t.translation.xy());
 
     for (mut motion, mut transform, mut velocity) in &mut enemies {
@@ -315,7 +323,7 @@ pub fn move_enemies(
                 *anchor + Vec2::from_angle(*phase) * *radius
             }
         };
-        
+
         velocity.0 = (new_pos - pos) / dt;
     }
 }

@@ -6,12 +6,14 @@
 use bevy::prelude::*;
 
 mod animation;
+pub mod enemy;
 pub mod level;
 mod movement;
-pub mod player;
-pub mod enemy;
-pub mod projectile;
 pub mod physics;
+pub mod player;
+pub mod progression;
+pub mod projectile;
+pub mod score;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins((
@@ -21,5 +23,7 @@ pub(super) fn plugin(app: &mut App) {
         player::plugin,
         enemy::plugin,
         projectile::plugin,
+        score::plugin,
+        progression::plugin,
     ));
 }

@@ -166,7 +166,7 @@ fn player_shoot(
     
     // Tick every frame even when not firing to keep cooldown running
     let ready = gun.ready(time.delta());
-    if !ready || !input.pressed(KeyCode::KeyB) {
+    if !ready || !input.pressed(KeyCode::KeyZ) {
         return;
     };
     
