@@ -4,11 +4,20 @@ use avian2d::prelude::*;
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 
 use crate::{
-    game::{enemy::*, level::*, player::*},
-    game::score::{PointValue, EnemyDefeated},
+    game::{
+        level::*,
+        physics::*,
+        player::*,
+        score::{EnemyDefeated, PointValue},
+    },
     game_manager::{Menu, PausableSystems, Pause},
     screens::Screen,
 };
+
+/// How fast (px/s) things are to get shoved appart
+const BOUNCE_SPEED: f32 = 600.0;
+/// Seconds of invulnerability to contact damage after a hit
+const HURT_COOLDOWN: f32 = 0.5;
 
 const HEALTHBAR_WIDTH: f32 = 50.0;
 const HEALTHBAR_HEIGHT: f32 = 6.0;
@@ -26,6 +35,7 @@ pub struct HealthBarOwner(pub Entity);
 /// A health component for damageable entities
 #[derive(Component, Reflect, Clone)]
 #[reflect(Component)]
+#[require(Knockback, HurtCooldown)]
 pub struct Health {
     pub current: f32,
     pub max: f32,
@@ -118,7 +128,7 @@ pub(super) fn plugin(app: &mut App) {
                     .and_then(not(in_state(Menu::None)))
                     .and_then(input_just_pressed(KeyCode::KeyP)),
             ),
-            wall_collisions_damage_player.in_set(PausableSystems),
+            collision_damage_and_bounce.in_set(PausableSystems),
             spawn_healthbars,
             update_healthbars,
         ),
@@ -166,65 +176,76 @@ fn close_menu(mut next_menu: ResMut<NextState<Menu>>) {
     next_menu.set(Menu::None);
 }
 
-fn wall_collisions_damage_player(
+/// Any collision damages, bounces, and any side that contains `Health`
+///
+/// player vs wall: Player hurt and bounces off wall
+/// Player vs Enemy: Player and Enemy hurt, both bounce appart
+/// Which pairs that collide is still determined by `GameLayer`
+/// and defined collision masks
+/// Bullets are sensors, handled by `projectile_hits` instead.
+pub fn collision_damage_and_bounce(
     mut collision_reader: MessageReader<CollisionStart>,
-    mut player_query: Query<&mut Health, With<Player>>,
-    channel_segment: Query<&Wall>,
-    mut next_screen: ResMut<NextState<Screen>>,
+    collisions: Collisions,
+    mut bodies: Query<(&mut Health, &mut Knockback, &mut HurtCooldown), Without<IsDead>>,
+    contact_damage: Query<&ContactDamage>,
+    transforms: Query<&GlobalTransform>,
+    sensors: Query<(), With<Sensor>>,
 ) {
-    // find out which entity is which, then do collision stuff
     for event in collision_reader.read() {
-        let entity1 = event.collider1;
-        let entity2 = event.collider2;
+        let (a, b) = (event.collider1, event.collider2);
 
-        // Is there a player? And who be that player?
-        let (player_entity, other_entity) = if player_query.contains(entity1) {
-            (entity1, entity2)
-        } else if player_query.contains(entity2) {
-            (entity2, entity1)
-        } else {
-            continue; // None of them colliders was a player, boo hoo skip
-        };
+        // Sensors (the pewpew) only report overlaps, don't actually bump things
+        if sensors.contains(a) || sensors.contains(b) {
+            continue;
+        }
 
-        // Now we also need a wall
-        if channel_segment.contains(other_entity) {
-            // println!("Wall is {}", other_entity);
-            if let Ok(mut health) = player_query.get_mut(player_entity) {
-                health.take_damage(5.0); // apply damage on colliding wall.
-
-                if !health.is_alive() {
-                    // println!("Player has died!");
-                    next_screen.set(Screen::Title)
-                } else {
-                    //println!("Player took damage! Current Health: {}", health.current)
-                }
-            }
+        // We run logic from each side's point of view, so if both
+        // have `Health` both get hurt and bounce
+        for (me, other) in [(a, b), (b, a)] {
+            let Ok((mut health, mut knockback, mut cooldown)) = bodies.get_mut(me) else {
+                continue; // For when `me` has no `health` (is wall, is dead)
+            };
+            
+            // Bounces every time, even while invulnerable so no stick to walls
+            let away = push_direction(&collisions, &transforms, me, other);
+            knockback.0 = away * BOUNCE_SPEED;
+            
+            if cooldown.0 > 0.0 {
+                continue;
+            };
+            
+            let damage = contact_damage.get(other).map_or(DEFAULT_CONTACT_DAMAGE, |d| d.0);
+            health.take_damage(damage);
+            cooldown.0 = HURT_COOLDOWN;
         }
     }
 }
 
-fn character_collisions_damage_each(
-    mut collision_reader: MessageReader<CollisionStart>,
-    mut player_query: Query<&mut Health, (With<Player>, Without<IsDead>)>,
-    mut enemy_query: Query<&mut Health, (With<Enemy>, Without<IsDead>)>,
-    mut next_screen: ResMut<NextState<Screen>>,
-) {
-    // Subtract health from colliding characters.
-    todo!();
-    // find out which entity is which, then do collision stuff
-    for event in collision_reader.read() {
-        let entity1 = event.collider1;
-        let entity2 = event.collider2;
-
-        // Is there a player? And who be that player?
-        let (player_entity, other_entity) = if player_query.contains(entity1) {
-            (entity1, entity2)
-        } else if player_query.contains(entity2) {
-            (entity2, entity1)
+/// Finds the unit direction that pushes `me` away from `other`
+/// 
+/// Prefers the real contact normal form Avian (correct for long walls and odd shapes)
+/// falls back to "Away from other center"
+fn push_direction(
+    collisions: &Collisions,
+    transforms: &Query<&GlobalTransform>,
+    me: Entity,
+    other: Entity,
+) -> Vec2 {
+    if let Some(pair) = collisions.get(me, other) && let Some(manifold) = pair.manifolds.first() {
+        // Avians normal points form Collider1 to Collider2.
+        // Lets get it pointing *towards* `me`, away from `other`
+        return if pair.collider1 == me {
+            -manifold.normal
         } else {
-            continue; // None of them colliders was a player, boo hoo skip
+            manifold.normal
         };
     }
+    
+    let (Ok(mine), Ok(theirs)) = (transforms.get(me), transforms.get(other)) else {
+        return Vec2::ZERO;
+    };
+    
+    (mine.translation().xy() - theirs.translation().xy()).normalize_or_zero()
 }
 
 /// Spawns a background + foreground healthbar pair for each entity that gains Health.

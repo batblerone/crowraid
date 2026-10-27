@@ -278,7 +278,7 @@ pub fn spawn_enemies(
 pub fn move_enemies(
     player: Query<&Transform, (With<Player>, Without<Enemy>, Without<IsDead>)>,
     time: Res<Time>,
-    mut enemies: Query<(&mut EnemyMotion, &mut Transform, &mut LinearVelocity), With<Enemy>>,
+    mut enemies: Query<(&mut EnemyMotion, &mut Transform, &mut LinearVelocity, Option<&Knockback>), With<Enemy>>,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {
@@ -286,11 +286,13 @@ pub fn move_enemies(
     }; // Don't divide by zero in first frame
     let player_pos = player.single().ok().map(|t| t.translation.xy());
 
-    for (mut motion, mut transform, mut velocity) in &mut enemies {
+    for (mut motion, mut transform, mut velocity, knockback) in &mut enemies {
         let pos = transform.translation.xy();
+        // How far a collision shoves an enemy this frame
+        let shove = knockback.map_or(Vec2::ZERO, |k| k.0) * dt;
 
         let new_pos = match &mut *motion {
-            EnemyMotion::Straight { speed } => pos + Vec2::NEG_Y * *speed * dt,
+            EnemyMotion::Straight { speed } => pos + Vec2::NEG_Y * *speed * dt + shove,
             EnemyMotion::Homing {
                 velocity,
                 turn_rate,
@@ -308,7 +310,7 @@ pub fn move_enemies(
                 }
                 // The mesh nose points up (+Y), so - 90 degrees to face along velocity
                 transform.rotation = Quat::from_rotation_z(velocity.to_angle() - FRAC_PI_2);
-                pos + *velocity * dt
+                pos + *velocity * dt + shove
             }
 
             EnemyMotion::Looping {
@@ -319,6 +321,7 @@ pub fn move_enemies(
                 descent,
             } => {
                 anchor.y -= *descent * dt;
+                *anchor += shove; // move the whole loop, so donut doesn't snap
                 *phase = (*phase + *angular_speed * dt).rem_euclid(TAU);
                 *anchor + Vec2::from_angle(*phase) * *radius
             }

@@ -20,6 +20,7 @@ pub(super) fn plugin(app: &mut App) {
         animation::plugin,
         level::plugin,
         movement::plugin,
+        physics::plugin,
         player::plugin,
         enemy::plugin,
         projectile::plugin,

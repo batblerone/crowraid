@@ -17,6 +17,7 @@ use avian2d::prelude::*;
 use bevy::{prelude::*, window::PrimaryWindow};
 
 use crate::{AppSystems, PausableSystems};
+use crate::game::physics::Knockback;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
@@ -52,9 +53,11 @@ impl Default for MovementController {
     }
 }
 
-fn apply_movement(mut movement_query: Query<(&MovementController, &mut LinearVelocity)>) {
-    for (controller, mut velocity) in &mut movement_query {
-        velocity.0 = controller.max_speed * controller.intent;
+fn apply_movement(mut movement_query: Query<(&MovementController, &mut LinearVelocity, Option<&Knockback>)>) {
+    for (controller, mut velocity, knockback) in &mut movement_query {
+        // Any bounce from a collision rides on top of players own movement
+        let shove = knockback.map_or(Vec2::ZERO, |k| k.0);
+        velocity.0 = controller.max_speed * controller.intent + shove;
     }
 }
 

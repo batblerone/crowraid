@@ -8,7 +8,10 @@ use crate::{
     PausableSystems,
     asset_tracking::LoadResource,
     audio::music,
-    game::player::{PlayerAssets, SelectedPlayer, player},
+    game::{
+        physics::GameLayer,
+        player::{PlayerAssets, SelectedPlayer, player},
+    },
     game_manager::Screen,
 };
 
@@ -79,7 +82,7 @@ pub fn spawn_level(
     level_assets: Res<LevelAssets>,
     player_assets: Res<PlayerAssets>,
     selected: ResMut<SelectedPlayer>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    #[allow(unused_variables)] texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut config: ResMut<ChannelGeneratorConfig>,
 ) {
     config.next_spawn_y = -400.0; // Reset height pointer whenever level entered.
@@ -153,6 +156,7 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
             RigidBody::Static,
             Collider::rectangle(left_width, SEGMENT_HEIGHT),
             Transform::from_xyz(left_center, 0.0, 0.0),
+            GameLayer::wall_layers(),
             CollisionEventsEnabled,
             // State management
             DespawnOnExit(Screen::Gameplay),
@@ -169,6 +173,7 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
             RigidBody::Static,
             Collider::rectangle(right_width, SEGMENT_HEIGHT),
             Transform::from_xyz(right_center, 0.0, 0.0),
+            GameLayer::wall_layers(),
             CollisionEventsEnabled,
             // State management
             DespawnOnExit(Screen::Gameplay),
@@ -187,6 +192,7 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
                 RigidBody::Static,
                 Collider::rectangle(island_width, SEGMENT_HEIGHT),
                 Transform::from_xyz(center_offset, 0.0, 0.0),
+                GameLayer::wall_layers(),
                 CollisionEventsEnabled,
                 // State management
                 DespawnOnExit(Screen::Gameplay),
