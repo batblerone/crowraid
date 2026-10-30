@@ -1,6 +1,6 @@
 //! Level progression: watches the score and decides when a boss should appear.
-//! 
-//! The boss doesn't exist yet, for now this module only keeps the accounting and 
+//!
+//! The boss doesn't exist yet, for now this module only keeps the accounting and
 //! sends the appropriate [`BossThresholdReached`] message once per level. A boss
 //! spawner can be dropped in later without touching any of the score code.
 
@@ -8,7 +8,7 @@ use bevy::prelude::*;
 
 use crate::{
     game::score::{Score, add_points_for_kills},
-    game_manager::Screen,
+    game_manager::{Screen, GamePhase},
 };
 
 /// Points needed before the first boss shows up
@@ -20,18 +20,16 @@ const POINTS_BETWEEN_BOSSES: u32 = 750;
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<LevelProgress>();
     app.add_message::<BossThresholdReached>();
-    
+
     app.add_systems(OnEnter(Screen::Gameplay), reset_progress);
     app.add_systems(
         Update,
-        (
-            check_boss_threshold.run_if(resource_changed::<Score>),
-            spawn_boss,
-        )
-        .chain()
-        // Look at score after this frames kills have been processed
-        .after(add_points_for_kills)
-        .run_if(in_state(Screen::Gameplay))
+        check_boss_threshold
+            .run_if(resource_changed::<Score>)
+            .run_if(in_state(GamePhase::Playing))
+            // Look at score after this frames kills have been processed
+            .after(add_points_for_kills)
+            .run_if(in_state(Screen::Gameplay))
     );
 }
 
@@ -59,13 +57,30 @@ impl Default for LevelProgress {
 
 impl LevelProgress {
     /// Call this when the boss dies. The next threshold is counted from the
-    /// score at the moment it is called. A big boss reward can't instantly 
+    /// score at the moment it is called. A big boss reward can't instantly
     /// summon the next boss.
-    #[allow(dead_code)] // fuse once bosses exist.
     pub fn advance(&mut self, current_score: u32) {
         self.level += 1;
         self.boss_threshold = current_score.saturating_add(POINTS_BETWEEN_BOSSES);
         self.boss_active = false;
+    }
+
+    /// Constructor for continued runs
+    pub fn starting_at(level: u32, score: u32) -> Self {
+        Self {
+            level,
+            boss_threshold: if level <= 1 {
+                FIRST_BOSS_AT
+            } else {
+                score.saturating_add(POINTS_BETWEEN_BOSSES)
+            },
+            boss_active: false,
+        }
+    }
+    
+    /// 0.0 on level 1, rising 0.15 per level, capped at 1.0 (level 7+).
+    pub fn difficulty(&self) -> f32 {
+            (self.level.saturating_sub(1) as f32 * 0.15).min(1.0)
     }
 }
 
@@ -89,18 +104,9 @@ pub fn check_boss_threshold(
     if progress.boss_active || score.current < progress.boss_threshold {
         return;
     }
-    
+
     progress.boss_active = true;
     reached.write(BossThresholdReached {
         level: progress.level,
     });
-}
-
-/// TODO: Spawn the actual boss here...
-pub fn spawn_boss(mut reached: MessageReader<BossThresholdReached>) {
-    for boss in reached.read() {
-        info!(
-            "Score threshold reached: Prepare to face the ultimate demise, level {} boss is coming", boss.level
-        );
-    }
 }

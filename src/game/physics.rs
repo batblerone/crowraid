@@ -37,6 +37,7 @@ pub enum GameLayer {
     Enemy,
     PlayerBullet,
     EnemyBullet,
+    Pickup,
 }
 
 impl GameLayer {
@@ -44,7 +45,12 @@ impl GameLayer {
     pub fn player_layers() -> CollisionLayers {
         CollisionLayers::new(
             GameLayer::Player,
-            [GameLayer::Walls, GameLayer::Enemy, GameLayer::EnemyBullet],
+            [
+                GameLayer::Walls,
+                GameLayer::Enemy,
+                GameLayer::EnemyBullet,
+                GameLayer::Pickup,
+            ],
         )
     }
 
@@ -54,6 +60,12 @@ impl GameLayer {
             GameLayer::Enemy,
             [GameLayer::Player, GameLayer::PlayerBullet, GameLayer::Walls],
         )
+    }
+    
+    /// Bosses hit the player and player bullets only, they can fly over anything
+    pub fn boss_layers() -> CollisionLayers {
+        CollisionLayers::new(GameLayer::Enemy, [GameLayer::Player,
+            GameLayer::PlayerBullet])
     }
 
     /// Player bullets collide with enemies and walls
@@ -74,6 +86,11 @@ impl GameLayer {
 
     pub fn wall_layers() -> CollisionLayers {
         CollisionLayers::new(GameLayer::Walls, LayerMask::ALL) // Everything is capable of colliding with the walls
+    }
+    
+    /// Only crows interact with pickups 
+    pub fn pickup_layers() -> CollisionLayers {
+        CollisionLayers::new(GameLayer::Pickup, [GameLayer::Player, GameLayer::PlayerBullet])
     }
 }
 

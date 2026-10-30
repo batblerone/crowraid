@@ -4,6 +4,8 @@
 const ATLAS_HEIGHT: u32 = 64;
 const ATLAS_WIDTH: u32 = 64;
 
+const SPAWN_INVUL: f32 = 2.0;
+
 use avian2d::prelude::*;
 use bevy::{
     image::{ImageLoaderSettings, ImageSampler, TextureAtlasTemplate},
@@ -15,6 +17,7 @@ use crate::{
     asset_tracking::LoadResource,
     game::{
         animation::PlayerAnimation,
+        energy::*,
         movement::{MovementController, ScreenWrap},
         physics::*,
         projectile::*,
@@ -34,6 +37,14 @@ pub(super) fn plugin(app: &mut App) {
             .in_set(AppSystems::RecordInput)
             .in_set(PausableSystems),
     );
+    
+    app.add_systems(
+        Update,
+        (grant_invincibility, tick_invincibility)
+            .chain()
+            .in_set(AppSystems::TickTimers)
+            .in_set(PausableSystems)
+    );
 }
 
 // The marker for Player
@@ -41,12 +52,46 @@ pub(super) fn plugin(app: &mut App) {
 #[reflect(Component)]
 pub struct Player;
 
+// while present, the player ignores damage and blinks
+#[derive(Component, Reflect, Clone, Debug, Default)]
+#[reflect(Component)]
+pub struct Invincible(pub Timer);
+
+pub fn grant_invincibility(mut commands: Commands, new_crows: Query<Entity, Added<Player>>) {
+    for crow in &new_crows {
+        commands.entity(crow).insert(Invincible(Timer::from_seconds(
+            SPAWN_INVUL,
+            TimerMode::Once,
+        )));
+    }
+}
+
+pub fn tick_invincibility(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut crows: Query<(Entity, &mut Invincible, &mut Sprite)>,
+) {
+    for (crow, mut shield, mut sprite) in &mut crows {
+        shield.0.tick(time.delta());
+        // Blink ten times a second
+        let bright = (shield.0.elapsed_secs() * 10.0) as u32 % 2 == 0;
+        
+        sprite.color.set_alpha(if bright { 1.0 } else { 0.3 });
+        if shield.0.is_finished() {
+            sprite.color.set_alpha(1.0);
+            commands.entity(crow).remove::<Invincible>();
+        }
+    }
+}
+
 /// The stats an attribute for each kind of player.
 pub struct PlayerStats {
     pub health: f32,
     pub speed: f32,
     pub scale: f32,
     pub collider_rad: f32,
+    pub energy: f32,
+    pub energy_drain: f32,
 }
 
 /// Where character sprite info is stored
@@ -94,6 +139,8 @@ impl PlayerKind {
                 speed: 400.0,
                 scale: 1.0,
                 collider_rad: 24.0,
+                energy: 100.0,
+                energy_drain: 2.5,
             },
         }
     }
@@ -108,6 +155,7 @@ impl PlayerKind {
 pub fn player_base_scene(kind: PlayerKind) -> impl Scene {
     let stats = kind.player_stats();
     let health = Health::new(stats.health);
+    let energy = Energy::new(stats.energy, stats.energy_drain);
     let controller = MovementController {
         max_speed: stats.speed,
         ..default()
@@ -121,6 +169,7 @@ pub fn player_base_scene(kind: PlayerKind) -> impl Scene {
         Player
         kind
         health
+        energy
         controller
         ScreenWrap
         RigidBody::Dynamic

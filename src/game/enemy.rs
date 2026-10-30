@@ -20,11 +20,16 @@ use avian2d::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::{color::palettes::css::*, prelude::*};
 
-use crate::AppSystems;
-use crate::asset_tracking::LoadResource;
-use crate::game::{physics::*, player::Player, score::PointValue};
-use crate::game_manager::{PausableSystems, Screen};
-use crate::screens::gameplay::{Health, IsDead};
+use crate::{
+    AppSystems,
+    asset_tracking::LoadResource,
+    game::{
+        boss::*, physics::*, player::Player, progression::LevelProgress, projectile::*,
+        score::PointValue,
+    },
+    game_manager::{GamePhase, PausableSystems, Screen},
+    screens::gameplay::{Health, IsDead},
+};
 
 /// New enemies will appear this far above the screen.
 const SPAWN_Y_MARGIN: f32 = 64.0;
@@ -65,26 +70,42 @@ pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Screen::Gameplay), reset_enemy_timer);
     app.add_systems(
         Update,
-        (spawn_enemies, move_enemies, despawn_offscreen_enemies)
-            .chain()
-            .run_if(in_state(Screen::Gameplay))
-            .in_set(AppSystems::Update)
-            .in_set(PausableSystems),
+        (
+            spawn_enemies.run_if(in_state(GamePhase::Playing).and_then(no_boss)),
+            move_enemies,
+            despawn_offscreen_enemies,
+        )
+            .chain(),
     );
+}
+
+fn no_boss(progress: Res<LevelProgress>) -> bool {
+    !progress.boss_active
+}
+
+pub fn clear_hazards(
+    mut commands: Commands,
+    hazards: Query<Entity, Or<((With<Enemy>, Without<Boss>), With<Projectile>)>>,
+) {
+    for entity in &hazards {
+        commands.entity(entity).despawn();
+    }
 }
 
 #[derive(Resource)]
 pub struct EnemyTimer(Timer);
 
-fn random_enemy_gap() -> Timer {
+/// Gaps shrink by up to 60% as difficulty rises.
+fn random_enemy_gap(difficulty: f32) -> Timer {
+    let max_gap = MAX_ENEMY_GAP * (1.0 - 0.6 * difficulty);
     Timer::from_seconds(
-        0.4 + fastrand::f32() * (MAX_ENEMY_GAP - 0.5),
+        0.4 + fastrand::f32() * (max_gap - 0.5).max(0.1),
         TimerMode::Once,
     )
 }
 
-fn reset_enemy_timer(mut commands: Commands) {
-    commands.insert_resource(EnemyTimer(random_enemy_gap()));
+fn reset_enemy_timer(mut commands: Commands, progress: Res<LevelProgress>) {
+    commands.insert_resource(EnemyTimer(random_enemy_gap(progress.difficulty())));
 }
 
 /// A component to define how / where enemies are to move
@@ -257,12 +278,13 @@ pub fn spawn_enemies(
     window: Single<&Window, With<PrimaryWindow>>,
     timer: Option<ResMut<EnemyTimer>>,
     player_query: Query<(), (With<Player>, Without<IsDead>)>,
+    progress: Res<LevelProgress>,
 ) {
     let Some(mut timer) = timer else { return };
     if !timer.0.tick(time.delta()).is_finished() {
         return;
     }
-    timer.0 = random_enemy_gap();
+    timer.0 = random_enemy_gap(progress.difficulty());
 
     if player_query.single().is_err() {
         return;
@@ -278,7 +300,15 @@ pub fn spawn_enemies(
 pub fn move_enemies(
     player: Query<&Transform, (With<Player>, Without<Enemy>, Without<IsDead>)>,
     time: Res<Time>,
-    mut enemies: Query<(&mut EnemyMotion, &mut Transform, &mut LinearVelocity, Option<&Knockback>), With<Enemy>>,
+    mut enemies: Query<
+        (
+            &mut EnemyMotion,
+            &mut Transform,
+            &mut LinearVelocity,
+            Option<&Knockback>,
+        ),
+        With<Enemy>,
+    >,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {

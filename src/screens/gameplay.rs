@@ -5,12 +5,14 @@ use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 
 use crate::{
     game::{
+        boss::Boss,
         level::*,
         physics::*,
+        pickup::Pickup,
         player::*,
         score::{EnemyDefeated, PointValue},
     },
-    game_manager::{Menu, PausableSystems, Pause},
+    game_manager::{GamePhase, Menu, PausableSystems, Pause, PlayerDied, RunSetup},
     screens::Screen,
 };
 
@@ -69,6 +71,10 @@ impl Health {
     pub fn h_ratio(&self) -> f32 {
         self.current / self.max
     }
+
+    pub fn heal(&mut self, amount: f32) {
+        self.current = (self.current + amount).min(self.max);
+    }
 }
 
 pub fn mark_dead(
@@ -87,29 +93,29 @@ pub fn mark_dead(
 /// This is the one place that confirms kills. Also means where kills are reported to score.
 /// Enemies that leave the screen are despawned by `despawn_offscreen_enemies` instead and
 /// never get here.
-fn handle_deaths(
+pub fn handle_deaths(
     mut commands: Commands,
     dead: Query<(Entity, Has<Player>, Option<&PointValue>, &Transform), Added<IsDead>>,
     mut defeated: MessageWriter<EnemyDefeated>,
-    mut next_screen: ResMut<NextState<Screen>>,
+    mut player_died: MessageWriter<PlayerDied>,
 ) {
     for (entity, is_player, points, transform) in &dead {
+        let position = transform.translation.xy();
         if is_player {
-            next_screen.set(Screen::Title);
-            continue;
-        }
-        if let Some(points) = points {
+            player_died.write(PlayerDied { position });
+        } else if let Some(points) = points {
             defeated.write(EnemyDefeated {
                 points: points.0,
-                position: transform.translation.xy(),
+                position,
             });
         }
+
         commands.entity(entity).despawn();
     }
 }
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(Screen::Gameplay), spawn_level);
+    app.add_systems(OnEnter(Screen::Gameplay), spawn_level.after(RunSetup));
 
     // Toggle pause on key press.
     app.add_systems(
@@ -121,7 +127,8 @@ pub(super) fn plugin(app: &mut App) {
                     .and_then(
                         input_just_pressed(KeyCode::KeyP)
                             .or_else(input_just_pressed(KeyCode::Escape)),
-                    ),
+                    )
+                    .and_then(not(in_state(GamePhase::GameOver))),
             ),
             close_menu.run_if(
                 in_state(Screen::Gameplay)
@@ -186,7 +193,15 @@ fn close_menu(mut next_menu: ResMut<NextState<Menu>>) {
 pub fn collision_damage_and_bounce(
     mut collision_reader: MessageReader<CollisionStart>,
     collisions: Collisions,
-    mut bodies: Query<(&mut Health, &mut Knockback, &mut HurtCooldown), Without<IsDead>>,
+    mut bodies: Query<
+        (
+            &mut Health,
+            &mut Knockback,
+            &mut HurtCooldown,
+            Has<Invincible>,
+        ),
+        Without<IsDead>,
+    >,
     contact_damage: Query<&ContactDamage>,
     transforms: Query<&GlobalTransform>,
     sensors: Query<(), With<Sensor>>,
@@ -202,19 +217,22 @@ pub fn collision_damage_and_bounce(
         // We run logic from each side's point of view, so if both
         // have `Health` both get hurt and bounce
         for (me, other) in [(a, b), (b, a)] {
-            let Ok((mut health, mut knockback, mut cooldown)) = bodies.get_mut(me) else {
+            let Ok((mut health, mut knockback, mut cooldown, invincible)) = bodies.get_mut(me)
+            else {
                 continue; // For when `me` has no `health` (is wall, is dead)
             };
-            
+
             // Bounces every time, even while invulnerable so no stick to walls
             let away = push_direction(&collisions, &transforms, me, other);
             knockback.0 = away * BOUNCE_SPEED;
-            
-            if cooldown.0 > 0.0 {
+
+            if cooldown.0 > 0.0 || invincible {
                 continue;
             };
-            
-            let damage = contact_damage.get(other).map_or(DEFAULT_CONTACT_DAMAGE, |d| d.0);
+
+            let damage = contact_damage
+                .get(other)
+                .map_or(DEFAULT_CONTACT_DAMAGE, |d| d.0);
             health.take_damage(damage);
             cooldown.0 = HURT_COOLDOWN;
         }
@@ -222,7 +240,7 @@ pub fn collision_damage_and_bounce(
 }
 
 /// Finds the unit direction that pushes `me` away from `other`
-/// 
+///
 /// Prefers the real contact normal form Avian (correct for long walls and odd shapes)
 /// falls back to "Away from other center"
 fn push_direction(
@@ -231,7 +249,9 @@ fn push_direction(
     me: Entity,
     other: Entity,
 ) -> Vec2 {
-    if let Some(pair) = collisions.get(me, other) && let Some(manifold) = pair.manifolds.first() {
+    if let Some(pair) = collisions.get(me, other)
+        && let Some(manifold) = pair.manifolds.first()
+    {
         // Avians normal points form Collider1 to Collider2.
         // Lets get it pointing *towards* `me`, away from `other`
         return if pair.collider1 == me {
@@ -240,18 +260,21 @@ fn push_direction(
             manifold.normal
         };
     }
-    
+
     let (Ok(mine), Ok(theirs)) = (transforms.get(me), transforms.get(other)) else {
         return Vec2::ZERO;
     };
-    
+
     (mine.translation().xy() - theirs.translation().xy()).normalize_or_zero()
 }
 
 /// Spawns a background + foreground healthbar pair for each entity that gains Health.
 pub fn spawn_healthbars(
     mut commands: Commands,
-    new_health: Query<(Entity, &GlobalTransform, &Health), Added<Health>>,
+    new_health: Query<
+        (Entity, &GlobalTransform, &Health),
+        (Without<Pickup>, Without<Boss>, Added<Health>),
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {

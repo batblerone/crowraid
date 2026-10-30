@@ -13,7 +13,11 @@ use bevy::{color::palettes::css::*, prelude::*, window::PrimaryWindow};
 use crate::{
     AppSystems,
     asset_tracking::LoadResource,
-    game::{enemy::EnemyKind, physics::GameLayer, player::Player},
+    game::{
+        enemy::EnemyKind,
+        physics::GameLayer,
+        player::{Invincible, Player},
+    },
     game_manager::{PausableSystems, Screen},
     screens::gameplay::{Health, IsDead},
 };
@@ -58,10 +62,10 @@ pub(super) fn plugin(app: &mut App) {
             despawn_offscreen_projectiles,
             projectile_hits,
         )
-        .chain()
-        .run_if(in_state(Screen::Gameplay))
-        .in_set(AppSystems::Update)
-        .in_set(PausableSystems),
+            .chain()
+            .run_if(in_state(Screen::Gameplay))
+            .in_set(AppSystems::Update)
+            .in_set(PausableSystems),
     );
 }
 
@@ -97,7 +101,11 @@ impl Gun {
     }
 
     pub fn player() -> Self {
-        Self::new(PLAYER_FIRE_INTERVAL, PLAYER_BULLET_SPEED, PLAYER_BULLET_DAMAGE)
+        Self::new(
+            PLAYER_FIRE_INTERVAL,
+            PLAYER_BULLET_SPEED,
+            PLAYER_BULLET_DAMAGE,
+        )
     }
 
     pub fn with_spread(mut self, shots: u32, spread: f32) -> Self {
@@ -107,7 +115,7 @@ impl Gun {
     }
 
     // Start partway through the cooldown, so enemies don't fire in sync
-    pub fn with_random_delay(mut self) -> Self  {
+    pub fn with_random_delay(mut self) -> Self {
         self.cooldown.reset();
         let head_start = self.cooldown.duration().mul_f32(fastrand::f32());
         self.cooldown.tick(head_start);
@@ -143,8 +151,11 @@ pub fn arm_new_enemies(
     for (entity, kind) in &new_enemies {
         let gun = match kind {
             EnemyKind::Square => continue,
-            EnemyKind::Triangle => { Gun::new(TRI_FIRE_INTERVAL, TRI_BULLET_SPEED, TRI_BULLET_DAMAGE) },
-            EnemyKind::Donut => { Gun::new(DONUT_FIRE_INTERVAL, DONUT_BULLET_SPEED, DONUT_BULLET_DAMAGE).with_spread(DONUT_SHOTS, DONUT_SPREAD) }
+            EnemyKind::Triangle => Gun::new(TRI_FIRE_INTERVAL, TRI_BULLET_SPEED, TRI_BULLET_DAMAGE),
+            EnemyKind::Donut => {
+                Gun::new(DONUT_FIRE_INTERVAL, DONUT_BULLET_SPEED, DONUT_BULLET_DAMAGE)
+                    .with_spread(DONUT_SHOTS, DONUT_SPREAD)
+            }
         };
 
         commands.entity(entity).insert(gun.with_random_delay());
@@ -163,15 +174,22 @@ fn player_shoot(
     let Ok((transform, mut gun)) = player.single_mut() else {
         return;
     };
-    
+
     // Tick every frame even when not firing to keep cooldown running
     let ready = gun.ready(time.delta());
     if !ready || !input.pressed(KeyCode::KeyZ) {
         return;
     };
-    
+
     let origin = transform.translation.xy();
-    fire(&mut commands, &assets, &mut gun, origin, Vec2::Y, Shooter::Player);
+    fire(
+        &mut commands,
+        &assets,
+        &mut gun,
+        origin,
+        Vec2::Y,
+        Shooter::Player,
+    );
 }
 
 /// Every armed enemy that is on screen fires at the player whe its gun is ready.
@@ -184,12 +202,14 @@ fn enemy_shoot(
     player: Query<&Transform, (With<Player>, Without<IsDead>)>,
     mut shooters: Query<(&Transform, &mut Gun), (Without<Player>, Without<IsDead>)>,
 ) {
-    let Ok(player_transform) = player.single() else { return; };
-    
+    let Ok(player_transform) = player.single() else {
+        return;
+    };
+
     let target = player_transform.translation.xy();
     let top = window.height() / 2.0;
-    
-    for (transform, mut gun) in & mut shooters {
+
+    for (transform, mut gun) in &mut shooters {
         let pos = transform.translation.xy();
         // enemies spawn above the window. Don't shoot or run cooldown
         // until they be visible.
@@ -199,7 +219,7 @@ fn enemy_shoot(
         if !gun.ready(time.delta()) {
             continue;
         }
-        
+
         let aim = (target - pos).try_normalize().unwrap_or(Vec2::NEG_Y);
         fire(&mut commands, &assets, &mut gun, pos, aim, Shooter::Enemy);
     }
@@ -215,7 +235,7 @@ fn fire(
     shooter: Shooter,
 ) {
     gun.cooldown.reset();
-    
+
     let (mesh, material, radius, layers) = match shooter {
         Shooter::Player => (
             &assets.player_mesh,
@@ -228,20 +248,20 @@ fn fire(
             &assets.enemy_material,
             ENEMY_BULLET_RADIUS,
             GameLayer::enemy_bullet_layers(),
-        )
+        ),
     };
-    
+
     let shots = gun.shots.max(1);
-    for i in 0..shots{
+    for i in 0..shots {
         // Spread out shots evently around `aim`. For 3 shots offests are -spread, 0, +spread.
         let offset = (i as f32 - (shots - 1) as f32 / 2.0) * gun.spread;
         let direction = Vec2::from_angle(offset).rotate(aim);
         let position = origin + direction * MUZZLE_OFFSET;
         let despawn = DespawnOnExit(Screen::Gameplay);
-        
+
         commands.spawn((
             Name::new("Projectile"),
-            Projectile {damage: gun.damage},
+            Projectile { damage: gun.damage },
             Mesh2d(mesh.clone()),
             MeshMaterial2d(material.clone()),
             Transform::from_translation(position.extend(BULLET_Z)),
@@ -254,7 +274,7 @@ fn fire(
             LinearVelocity(direction * gun.bullet_speed),
             layers,
             CollisionEventsEnabled,
-            despawn
+            despawn,
         ));
     }
 }
@@ -279,11 +299,11 @@ fn projectile_hits(
     mut commands: Commands,
     mut collisions: MessageReader<CollisionStart>,
     projectiles: Query<&Projectile>,
-    mut targets: Query<&mut Health, Without<IsDead>>,
+    mut targets: Query<&mut Health, (Without<IsDead>, Without<Invincible>)>,
 ) {
     // A bullet can touch two things in one physics step. Only its first hit counts.
     let mut spent = HashSet::new();
- 
+
     for event in collisions.read() {
         // Work out which side of the pair is the bullet.
         let (bullet, target) = if projectiles.contains(event.collider1) {
@@ -300,7 +320,7 @@ fn projectile_hits(
             continue;
         }
         commands.entity(bullet).despawn();
- 
+
         // Something with no health (like a wall, if you let bullets hit walls)
         // just absorbs the bullet. Already-dead targets are skipped by the query.
         let Ok(mut health) = targets.get_mut(target) else {
@@ -313,7 +333,7 @@ fn projectile_hits(
         health.take_damage(projectile.damage);
     }
 }
- 
+
 /// Bullet meshes and colors, built in code like `EnemyAssets`.
 #[derive(Resource, Asset, Clone, Reflect)]
 #[reflect(Resource)]
@@ -324,7 +344,7 @@ pub struct ProjectileAssets {
     enemy_mesh: Handle<Mesh>,
     enemy_material: Handle<ColorMaterial>,
 }
- 
+
 impl FromWorld for ProjectileAssets {
     fn from_world(world: &mut World) -> Self {
         let (player_mesh, enemy_mesh) = {

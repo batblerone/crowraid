@@ -10,6 +10,7 @@ mod dev_tools;
 mod game;
 mod game_manager;
 mod menus;
+mod save;
 mod screens;
 mod theme;
 
@@ -49,6 +50,10 @@ impl Plugin for AppPlugin {
         // initialize the physics plugins
         app.add_plugins(PhysicsPlugins::default());
 
+        // Initialize the game manager before other custom plugins
+        app.add_plugins(game_manager::plugin);
+        app.add_plugins(save::plugin);
+
         // Add other plugins.
         app.add_plugins((
             asset_tracking::plugin,
@@ -73,7 +78,6 @@ impl Plugin for AppPlugin {
         );
 
         // Set up the `Pause` state.
-        app.init_state::<Pause>();
         app.configure_sets(Update, PausableSystems.run_if(in_state(Pause(false))));
 
         // Spawn the main camera.
