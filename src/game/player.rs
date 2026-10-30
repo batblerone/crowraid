@@ -26,7 +26,7 @@ use crate::{
 pub(super) fn plugin(app: &mut App) {
     app.load_resource::<PlayerAssets>();
     app.init_resource::<SelectedPlayer>();
-    
+
     // Record directional input as movement controls.
     app.add_systems(
         Update,
@@ -74,7 +74,7 @@ pub struct SelectedPlayer(pub PlayerKind);
 impl PlayerKind {
     /// For every kind, in the same order as the enum. Asset loading walks this list.
     pub const ALL: [PlayerKind; 1] = [PlayerKind::OrdinaryCrow];
-    
+
     pub fn player_sheet(self) -> PlayerSpriteSheet {
         match self {
             PlayerKind::OrdinaryCrow => PlayerSpriteSheet {
@@ -86,24 +86,23 @@ impl PlayerKind {
             },
         }
     }
-    
+
     pub fn player_stats(self) -> PlayerStats {
         match self {
             PlayerKind::OrdinaryCrow => PlayerStats {
                 health: 100.0,
                 speed: 400.0,
                 scale: 1.0,
-                collider_rad: 64.0,
+                collider_rad: 24.0,
             },
         }
     }
-    
+
     /// This kinds position within `ALL`, and in `PlayerAssets` lists.
     fn index(self) -> usize {
         self as usize
     }
 }
-
 
 /// Everything that the player is: identity, stats, movement, physics, lifetime, etc.
 pub fn player_base_scene(kind: PlayerKind) -> impl Scene {
@@ -116,7 +115,7 @@ pub fn player_base_scene(kind: PlayerKind) -> impl Scene {
     let collider = Collider::circle(stats.collider_rad);
     let layers = GameLayer::player_layers();
     let despawn = DespawnOnExit(Screen::Gameplay);
-    
+
     bsn! {
         Name::new("Player")
         Player
@@ -135,7 +134,7 @@ pub fn player_base_scene(kind: PlayerKind) -> impl Scene {
 }
 
 /// The actual player character, ready to fly into the world anew
-pub fn player(kind: PlayerKind, assets: &PlayerAssets) -> impl Scene  {
+pub fn player(kind: PlayerKind, assets: &PlayerAssets) -> impl Scene {
     let animation = PlayerAnimation::new();
     let sheet = assets.sheet(kind);
     let layout = assets.layout(kind);
@@ -147,14 +146,14 @@ pub fn player(kind: PlayerKind, assets: &PlayerAssets) -> impl Scene  {
         // Sprite is it's own thing in bsn!. So using the sprite function of bsn
         // we can define the sprite for our player. Where image is the sheet
         // that we have loaded in our asset loader down below.
-        // 
+        //
         // The texture_atlas is different. This is an option from our asset loader that
         // we want to pass off into our bsn! call. To do this we have to use the template
         // where then we have to `.into()` our layout to get the `HandleTemplate` needed for
         // `TextureAtlasTemplate`.
         Sprite {
             image: sheet,
-            texture_atlas: { 
+            texture_atlas: {
                 Some(TextureAtlasTemplate{
                     layout: layout.into(),
                     index: index
@@ -216,7 +215,7 @@ impl PlayerAssets {
     pub fn sheet(&self, kind: PlayerKind) -> Handle<Image> {
         self.sheets[kind.index()].clone()
     }
-    
+
     pub fn layout(&self, kind: PlayerKind) -> Handle<TextureAtlasLayout> {
         self.layouts[kind.index()].clone()
     }
@@ -233,7 +232,7 @@ impl FromWorld for PlayerAssets {
                 "PlayerKind::ALL must list veriants in declaration order."
             );
         }
-        
+
         // A texture atlas is a fancy way to split a single image into a grid of related images.
         // an example is found here: https://github.com/bevyengine/bevy/blob/latest/examples/2d/texture_atlas.rs
         let layouts = {
@@ -252,9 +251,9 @@ impl FromWorld for PlayerAssets {
                 })
                 .collect()
         };
-        
+
         let assets = world.resource::<AssetServer>();
-        
+
         let sheets = PlayerKind::ALL
             .iter()
             .map(|kind| {
@@ -267,7 +266,7 @@ impl FromWorld for PlayerAssets {
                     .load(kind.player_sheet().path)
             })
             .collect();
-        
+
         Self {
             sheets,
             layouts,
