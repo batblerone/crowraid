@@ -1,7 +1,7 @@
 //! Spawn the main level.
 
 use avian2d::prelude::*;
-use bevy::{color::palettes::css::*, prelude::*};
+use bevy::{color::palettes::css::*, prelude::*, window::PrimaryWindow};
 use noise::{NoiseFn, Perlin};
 
 use crate::{
@@ -19,6 +19,8 @@ pub const SEGMENT_HEIGHT: f32 = 10.0;
 pub const SCROLL_SPEED: f32 = 300.0;
 pub const SCREEN_HALF_WIDTH: f32 = 600.0;
 pub const CHANNEL_WIDTH: f32 = 800.0;
+
+const LOOKAHEAD: f32 = 400.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<ChannelGeneratorConfig>()
@@ -207,15 +209,14 @@ pub fn spawn_single_segment(commands: &mut Commands, config: &mut ChannelGenerat
 pub fn generate_channel_segments(
     mut commands: Commands,
     mut config: ResMut<ChannelGeneratorConfig>,
-    query: Query<&ChannelSegment>,
+    window: Single<&Window, With<PrimaryWindow>>,
 ) {
-    // Gotta have that buffer for them segments ahead of player view
-    let highest_y = query.iter().map(|s| s.top_y).fold(-500.0, f32::max);
-
-    let mut spawned_count = 0;
-    while config.next_spawn_y < highest_y + 1200.0 && spawned_count < 10 {
+    // Spawn limit restricts spawns above the window to a certain height
+    let spawn_limit = window.height() * 0.5 + LOOKAHEAD;
+    let mut spawned = 0;
+    while config.next_spawn_y < spawn_limit && spawned < 32 {
         spawn_single_segment(&mut commands, &mut config);
-        spawned_count += 1;
+        spawned += 1;
     }
 }
 /// Scrolls the channel segments down the screen
