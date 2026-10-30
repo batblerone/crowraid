@@ -268,7 +268,10 @@ fn fire(
             // This is different, it is `Dynamic` so avian always checks it against
             // kinematic enemies and the dynamic player, as a sensor, it never pushes: only reports.
             RigidBody::Dynamic,
+            // Sensor colliders add no mass, so give the body its own. Avian's
+            // "no mass or inertia" warning needs BOTH to be set.
             Mass(1.0),
+            AngularInertia(1.0),
             Collider::circle(radius),
             Sensor,
             GravityScale(0.0),

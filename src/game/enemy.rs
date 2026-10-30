@@ -39,6 +39,10 @@ const MAX_ENEMY_GAP: f32 = 10.0; // Seconds
 const SPAWN_X_RANGE: f32 = 200.0;
 /// Margin for despawning enemies
 const OFFSCREEN_MARGIN: f32 = 128.0;
+/// How strongly a looping enemy is pulled back onto its circle, per second.
+/// Small on purpose: physics moves bodies on a fixed 64 Hz tick, and a large
+/// pull overshoots when frames are shorter than that tick.
+const PATH_CORRECTION: f32 = 4.0;
 
 /// Constants for the squarees
 const SQUARE_SPEED: f32 = 100.0;
@@ -323,13 +327,17 @@ pub fn move_enemies(
     }; // Don't divide by zero in first frame
     let player_pos = player.single().ok().map(|t| t.translation.xy());
 
+    // Every arm returns a *velocity*. Avian integrates it on its own fixed tick,
+    // so we never compute "the speed needed to reach X by next frame": with
+    // frames shorter than the physics tick (120+ fps) that overshoots, the error
+    // grows every tick, and the body flies off towards infinity.
     for (mut motion, mut transform, mut velocity, knockback) in &mut enemies {
         let pos = transform.translation.xy();
-        // How far a collision shoves an enemy this frame
-        let shove = knockback.map_or(Vec2::ZERO, |k| k.0) * dt;
+        // A collision bounce, as a velocity riding on top of normal movement.
+        let bounce = knockback.map_or(Vec2::ZERO, |k| k.0);
 
-        let new_pos = match &mut *motion {
-            EnemyMotion::Straight { speed } => pos + Vec2::NEG_Y * *speed * dt + shove,
+        velocity.0 = match &mut *motion {
+            EnemyMotion::Straight { speed } => Vec2::NEG_Y * *speed + bounce,
             EnemyMotion::Homing {
                 velocity,
                 turn_rate,
@@ -347,7 +355,7 @@ pub fn move_enemies(
                 }
                 // The mesh nose points up (+Y), so - 90 degrees to face along velocity
                 transform.rotation = Quat::from_rotation_z(velocity.to_angle() - FRAC_PI_2);
-                pos + *velocity * dt + shove
+                *velocity + bounce
             }
 
             EnemyMotion::Looping {
@@ -358,13 +366,16 @@ pub fn move_enemies(
                 descent,
             } => {
                 anchor.y -= *descent * dt;
-                *anchor += shove; // move the whole loop, so donut doesn't snap
+                *anchor += bounce * dt; // move the whole loop, so donut doesn't snap
                 *phase = (*phase + *angular_speed * dt).rem_euclid(TAU);
-                *anchor + Vec2::from_angle(*phase) * *radius
+                let on_path = *anchor + Vec2::from_angle(*phase) * *radius;
+
+                // Velocity along the circle (the path's derivative), plus the
+                // anchor's own motion, plus a gentle pull back onto the path.
+                let around = Vec2::from_angle(*phase).perp() * *radius * *angular_speed;
+                around + Vec2::NEG_Y * *descent + bounce + (on_path - pos) * PATH_CORRECTION
             }
         };
-
-        velocity.0 = (new_pos - pos) / dt;
     }
 }
 
@@ -377,8 +388,9 @@ pub fn despawn_offscreen_enemies(
     let half = window.size() / 2.0 + OFFSCREEN_MARGIN;
     for (entity, transform) in &enemies {
         let pos = transform.translation.xy();
-        // only the bottom and sides are checked, enemys spawn top and move down
-        if pos.y < -half.y || pos.x.abs() > half.x {
+        // only the bottom and sides are checked, enemys spawn top and move down.
+        // A non-finite position is a safety net: remove it before physics chokes on it.
+        if !pos.is_finite() || pos.y < -half.y || pos.x.abs() > half.x {
             commands.entity(entity).despawn();
         }
     }

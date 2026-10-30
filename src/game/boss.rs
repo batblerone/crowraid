@@ -35,6 +35,11 @@ const BOSS_FIRE_INTERVAL: f32 = 1.0;
 const BOSS_BULLET_SPEED: f32 = 350.0;
 const BOSS_BULLET_DAMAGE: f32 = 10.0;
 const BOSS_SPREAD: f32 = 0.22;
+/// Up-and-down bob while swaying.
+const BOSS_BOB_AMPLITUDE: f32 = 20.0;
+const BOSS_BOB_SPEED: f32 = 1.3;
+/// Gentle pull back onto the sway path, per second (see enemy.rs PATH_CORRECTION).
+const BOSS_PATH_CORRECTION: f32 = 4.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.load_resource::<BossAssets>();
@@ -113,26 +118,31 @@ fn move_boss(
     }
     for (mut motion, transform, mut velocity) in &mut bosses {
         let pos = transform.translation.xy();
-        let target = match *motion {
+        // Like move_enemies: set a velocity and let Avian's fixed tick move the
+        // body. Never "(target - pos) / dt", which overshoots above ~120 fps.
+        velocity.0 = match *motion {
             BossMotion::Entering => {
-                let next = pos + Vec2::NEG_Y * BOSS_ENTRY_SPEED * dt;
-                if next.y <= BOSS_HOLD_Y {
+                if pos.y <= BOSS_HOLD_Y {
                     *motion = BossMotion::Swaying { time: 0.0 };
-                    Vec2::new(next.x, BOSS_HOLD_Y)
-                } else {
-                    next
                 }
+                Vec2::NEG_Y * BOSS_ENTRY_SPEED
             }
             BossMotion::Swaying { time } => {
                 let t = time + dt;
                 *motion = BossMotion::Swaying { time: t };
-                let x = (t / BOSS_SWAY_PERIOD * TAU).sin() * BOSS_SWAY_AMPLITUDE;
-                let bob = (t * 1.3).sin() * 20.0;
-                Vec2::new(x, BOSS_HOLD_Y + bob)
+                let sway_speed = TAU / BOSS_SWAY_PERIOD;
+                let on_path = Vec2::new(
+                    (t * sway_speed).sin() * BOSS_SWAY_AMPLITUDE,
+                    BOSS_HOLD_Y + (t * BOSS_BOB_SPEED).sin() * BOSS_BOB_AMPLITUDE,
+                );
+                // The path's own velocity, plus a gentle pull back onto it.
+                let along = Vec2::new(
+                    (t * sway_speed).cos() * BOSS_SWAY_AMPLITUDE * sway_speed,
+                    (t * BOSS_BOB_SPEED).cos() * BOSS_BOB_AMPLITUDE * BOSS_BOB_SPEED,
+                );
+                along + (on_path - pos) * BOSS_PATH_CORRECTION
             }
         };
-        // Same trick as move_enemies: drive the kinematic body by velocity.
-        velocity.0 = (target - pos) / dt;
     }
 }
 
