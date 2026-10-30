@@ -39,6 +39,7 @@ pub(super) fn plugin(app: &mut App) {
             update_level_text.run_if(resource_changed::<LevelProgress>),
             update_life_icons.run_if(resource_changed::<Lives>),
             update_player_bars,
+            update_boss_bar,
         )
             .run_if(in_state(Screen::Gameplay)),
     );
@@ -188,20 +189,19 @@ fn spawn_hud(
         BossFill,
         ChildOf(boss_bar),
     ));
+}
 
-    // Add to the HUD Update tuple:
-    fn update_boss_bar(
-        boss: Query<&Health, With<Boss>>,
-        mut bar: Single<&mut Node, (With<BossBar>, Without<BossFill>)>,
-        mut fill: Single<&mut Node, (With<BossFill>, Without<BossBar>)>,
-    ) {
-        match boss.single() {
-            Ok(health) => {
-                bar.display = Display::Flex;
-                fill.width = Val::Percent(health.h_ratio() * 100.0);
-            }
-            Err(_) => bar.display = Display::None,
+fn update_boss_bar(
+    boss: Query<&Health, With<Boss>>,
+    mut bar: Single<&mut Node, (With<BossBar>, Without<BossFill>)>,
+    mut fill: Single<&mut Node, (With<BossFill>, Without<BossBar>)>,
+) {
+    match boss.single() {
+        Ok(health) => {
+            bar.display = Display::Flex;
+            fill.width = Val::Percent(health.h_ratio() * 100.0);
         }
+        Err(_) => bar.display = Display::None,
     }
 }
 

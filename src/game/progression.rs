@@ -21,7 +21,7 @@ pub(super) fn plugin(app: &mut App) {
     app.init_resource::<LevelProgress>();
     app.add_message::<BossThresholdReached>();
 
-    app.add_systems(OnEnter(Screen::Gameplay), reset_progress);
+    // Reset by `start_run` in game_manager.rs, which knows about Continue.
     app.add_systems(
         Update,
         check_boss_threshold
@@ -88,10 +88,6 @@ impl LevelProgress {
 #[derive(Message, Debug, Clone, Copy)]
 pub struct BossThresholdReached {
     pub level: u32,
-}
-
-pub fn reset_progress(mut progress: ResMut<LevelProgress>) {
-    *progress = LevelProgress::default();
 }
 
 pub fn check_boss_threshold(

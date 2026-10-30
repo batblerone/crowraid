@@ -119,6 +119,11 @@ fn record_checkpoint(
     seed: Res<RunSeed>,
     mut save: MessageWriter<SaveRequest>,
 ) {
+    // OnExit(LevelClear) also runs when quitting to the title mid-banner, before
+    // `advance()`. The boss flag is only cleared by `advance()`, so skip that case.
+    if progress.boss_active {
+        return;
+    }
     data.checkpoint = Some(Checkpoint {
         level: progress.level,
         score: score.current,

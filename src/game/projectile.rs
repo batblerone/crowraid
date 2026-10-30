@@ -268,6 +268,7 @@ fn fire(
             // This is different, it is `Dynamic` so avian always checks it against
             // kinematic enemies and the dynamic player, as a sensor, it never pushes: only reports.
             RigidBody::Dynamic,
+            Mass(1.0),
             Collider::circle(radius),
             Sensor,
             GravityScale(0.0),

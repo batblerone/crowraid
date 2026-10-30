@@ -2,6 +2,7 @@
 //! save states and overall progress of the game.
 
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::game::{player::*, progression::*, score::*};
 
@@ -15,7 +16,8 @@ pub(super) fn plugin(app: &mut App) {
     app.init_state::<Screen>();
     app.init_state::<Menu>();
     app.init_state::<Pause>();
-    app.init_state::<GamePhase>();
+    // A sub-state: only exists during Screen::Gameplay, reset to Playing on every entry.
+    app.add_sub_state::<GamePhase>();
 
     app.init_resource::<Lives>();
     app.init_resource::<RunStart>();
@@ -117,7 +119,7 @@ impl Default for Lives {
 pub struct RunSeed(pub u32);
 
 /// Where a run picks up from. Saved after a level clear
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Checkpoint {
     pub level: u32,
     pub score: u32,

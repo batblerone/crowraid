@@ -68,11 +68,11 @@ impl GameLayer {
             GameLayer::PlayerBullet])
     }
 
-    /// Player bullets collide with enemies and walls
+    /// Player bullets collide with enemies, walls and (shootable) pickups
     pub fn player_bullet_layers() -> CollisionLayers {
         CollisionLayers::new(
             GameLayer::PlayerBullet,
-            [GameLayer::Enemy, GameLayer::Walls],
+            [GameLayer::Enemy, GameLayer::Walls, GameLayer::Pickup],
         )
     }
 

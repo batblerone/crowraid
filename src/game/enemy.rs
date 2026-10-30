@@ -71,12 +71,19 @@ pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         (
-            spawn_enemies.run_if(in_state(GamePhase::Playing).and_then(no_boss)),
+            spawn_enemies
+                .run_if(in_state(GamePhase::Playing))
+                .run_if(no_boss),
             move_enemies,
             despawn_offscreen_enemies,
         )
-            .chain(),
+            .chain()
+            .run_if(in_state(Screen::Gameplay))
+            .in_set(AppSystems::Update)
+            .in_set(PausableSystems),
     );
+    // A fair restart after each death: clear enemies and bullets, keep the boss.
+    app.add_systems(OnEnter(GamePhase::Respawning), clear_hazards);
 }
 
 fn no_boss(progress: Res<LevelProgress>) -> bool {

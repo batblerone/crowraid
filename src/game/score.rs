@@ -9,21 +9,16 @@
 
 use bevy::prelude::*;
 
-use crate::{game_manager::Screen, theme::widget};
+use crate::game_manager::Screen;
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<Score>();
     app.add_message::<EnemyDefeated>();
 
-    app.add_systems(OnEnter(Screen::Gameplay), (reset_score, spawn_score_hud));
+    // The run's score is reset by `start_run` (game_manager.rs), and drawn by hud.rs.
     app.add_systems(
         Update,
-        (
-            add_points_for_kills,
-            update_score_hud.run_if(resource_changed::<Score>),
-        )
-            .chain()
-            .run_if(in_state(Screen::Gameplay)),
+        add_points_for_kills.run_if(in_state(Screen::Gameplay)),
     );
 }
 
@@ -63,42 +58,10 @@ impl Score {
     }
 }
 
-/// Every run starts from zero. `best` is kept.
-pub fn reset_score(mut score: ResMut<Score>) {
-    score.current = 0;
-}
-
 /// Turns kill messages into points
 pub fn add_points_for_kills(mut defeated: MessageReader<EnemyDefeated>, mut score: ResMut<Score>) {
     for kill in defeated.read() {
         score.add(kill.points);
-    }
-}
-
-/// Marks the text node that shows the score
-#[derive(Component)]
-struct ScoreText;
-
-pub fn spawn_score_hud(mut commands: Commands) {
-    commands.spawn((
-        Name::new("Score HUD"),
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(16),
-            top: px(16),
-            ..default()
-        },
-        // Clicks are to go thorugh the hud
-        Pickable::IGNORE,
-        DespawnOnExit(Screen::Gameplay),
-        children![(widget::label(score_label(0)), ScoreText)],
-    ));
-}
-
-/// Only runs on frames where `Score` actually changed
-pub fn update_score_hud(score: Res<Score>, mut texts: Query<&mut Text, With<ScoreText>>) {
-    for mut text in &mut texts {
-        text.0 = score_label(score.current);
     }
 }
 

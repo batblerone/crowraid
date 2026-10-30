@@ -13,8 +13,6 @@ use bevy::prelude::*;
 //pub const WINDOW_HEIGHT: f32 = 600.0;
 
 pub(super) fn plugin(app: &mut App) {
-    app.init_state::<Screen>();
-
     app.add_plugins((
         gameplay::plugin,
         loading::plugin,

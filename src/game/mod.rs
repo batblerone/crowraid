@@ -36,7 +36,6 @@ pub(super) fn plugin(app: &mut App) {
         progression::plugin,
         projectile::plugin,
         score::plugin,
-        progression::plugin,
         tiles::plugin,
     ));
 }
