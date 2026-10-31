@@ -96,6 +96,12 @@ enum AppSystems {
     RecordInput,
     /// Do everything else (consider splitting this into further variants).
     Update,
+    /// Mark and despawn anything whose health hits zero this frame
+    /// Runs at end of the `Update`, never in `PostUpdate`
+    /// The sprite render queus component nsers on sprites in 
+    /// `PostUpdate`, despawning there can race inserts with
+    /// then panic with `EntityDespawned`
+    ResolveDeaths
 }
 
 fn spawn_camera(mut commands: Commands) {

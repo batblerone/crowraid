@@ -4,6 +4,7 @@ use avian2d::prelude::*;
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 
 use crate::{
+    AppSystems,
     game::{
         boss::Boss,
         level::*,
@@ -135,21 +136,21 @@ pub(super) fn plugin(app: &mut App) {
                     .and_then(not(in_state(Menu::None)))
                     .and_then(input_just_pressed(KeyCode::KeyP)),
             ),
-            collision_damage_and_bounce.in_set(PausableSystems),
+            collision_damage_and_bounce
+                .in_set(AppSystems::Update)
+                .in_set(PausableSystems),
             spawn_healthbars,
             update_healthbars,
+            (mark_dead, handle_deaths)
+                .chain()
+                .in_set(AppSystems::ResolveDeaths)
+                .run_if(in_state(Screen::Gameplay)),
         ),
     );
     app.add_systems(OnExit(Screen::Gameplay), (close_menu, unpause));
     app.add_systems(
         OnEnter(Menu::None),
         unpause.run_if(in_state(Screen::Gameplay)),
-    );
-    app.add_systems(
-        PostUpdate,
-        (mark_dead, handle_deaths)
-            .chain()
-            .run_if(in_state(Screen::Gameplay)),
     );
 }
 
