@@ -19,7 +19,7 @@ use crate::{
         river::{RiverGenerator, Water},
         tiles::{
             BIOME_COUNT, COLUMNS, TILE_SIZE, TileAssets, corner_row, solid_runs, tile_collider,
-            tile_mask, tile_sprite,
+            tile_mask, tile_sprites,
         },
     },
     game_manager::{GamePhase, RunSeed, Screen},
@@ -35,8 +35,10 @@ const CLEANUP_MARGIN: f32 = 2.0 * TILE_SIZE;
 const MAX_ROWS_PER_FRAME: usize = 32;
 /// Where a new or respawned crow appears, in world y.
 const PLAYER_START_Y: f32 = -220.0;
-/// Shows through the transparent open-water tiles (mask 0).
-const WATER_COLOR: Color = Color::srgb(0.2, 0.41, 0.66);
+/// Shows through the transparent open-water tiles (mask 0) and around the
+/// shore pieces. Matches the water in Kenney's roguelike sheet.
+const WATER_COLOR: Color = Color::srgb_u8(99, 197, 207);
+     
 
 pub(super) fn plugin(app: &mut App) {
     app.load_resource::<LevelAssets>();
@@ -100,7 +102,7 @@ pub struct ChannelGeneratorConfig {
     /// Land/water at the grid corners along the top of the last row spawned.
     /// The next row uses it as its bottom corners.
     pub prev_corners: Option<Vec<bool>>,
-    /// Which 16-tile block of the sheet new rows use.
+    /// Index into `tiles::BIOMES` for new rows.
     pub biome: u32,
 }
 
@@ -255,7 +257,9 @@ pub fn spawn_single_segment(
                 let mask = tile_mask(&below, &above, col);
                 // Mask 0 is open water: the clear colour already draws it.
                 if mask != 0 {
-                    parent.spawn(tile_sprite(tile_assets, biome, mask, col));
+                    for sprite in tile_sprites(tile_assets, biome, mask, col) {
+                        parent.spawn(sprite);
+                    }
                 }
             }
             for (left, right) in solid {
