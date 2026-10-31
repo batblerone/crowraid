@@ -15,7 +15,7 @@ use crate::{
 /// Flying up the screen (flapps hard) multiplies the drain by this amount
 const CLIMB_DRAIN_MULTIPLIER: f32 = 2.0;
 /// Health lost per second while energy is empty
-const STARVING_DAMAGE_PER_SEC: f32 = 15.0;
+const STARVING_DAMAGE_PER_SEC: f32 = 0.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(

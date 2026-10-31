@@ -53,8 +53,9 @@ pub(super) fn plugin(app: &mut App) {
     );
     // Between "health hit zero" and "entity despawned", so Added<IsDead> is visible.
     app.add_systems(
-        PostUpdate,
+        Update,
         report_boss_death
+            .in_set(AppSystems::ResolveDeaths)
             .after(mark_dead)
             .before(handle_deaths)
             .run_if(in_state(Screen::Gameplay)),

@@ -8,7 +8,7 @@ use bevy::prelude::*;
 
 use crate::{
     game::score::{Score, add_points_for_kills},
-    game_manager::{Screen, GamePhase},
+    game_manager::{GamePhase, Screen},
 };
 
 /// Points needed before the first boss shows up
@@ -29,7 +29,7 @@ pub(super) fn plugin(app: &mut App) {
             .run_if(in_state(GamePhase::Playing))
             // Look at score after this frames kills have been processed
             .after(add_points_for_kills)
-            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(Screen::Gameplay)),
     );
 }
 
@@ -77,10 +77,10 @@ impl LevelProgress {
             boss_active: false,
         }
     }
-    
+
     /// 0.0 on level 1, rising 0.15 per level, capped at 1.0 (level 7+).
     pub fn difficulty(&self) -> f32 {
-            (self.level.saturating_sub(1) as f32 * 0.15).min(1.0)
+        (self.level.saturating_sub(1) as f32 * 0.15).min(1.0)
     }
 }
 

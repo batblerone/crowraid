@@ -73,6 +73,7 @@ impl Plugin for AppPlugin {
                 AppSystems::TickTimers,
                 AppSystems::RecordInput,
                 AppSystems::Update,
+                AppSystems::ResolveDeaths,
             )
                 .chain(),
         );
@@ -98,10 +99,10 @@ enum AppSystems {
     Update,
     /// Mark and despawn anything whose health hits zero this frame
     /// Runs at end of the `Update`, never in `PostUpdate`
-    /// The sprite render queus component nsers on sprites in 
+    /// The sprite render queus component nsers on sprites in
     /// `PostUpdate`, despawning there can race inserts with
     /// then panic with `EntityDespawned`
-    ResolveDeaths
+    ResolveDeaths,
 }
 
 fn spawn_camera(mut commands: Commands) {
